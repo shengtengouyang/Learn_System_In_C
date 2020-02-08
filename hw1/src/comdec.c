@@ -91,6 +91,54 @@ int decompress(FILE *in, FILE *out) {
  */
 int validargs(int argc, char **argv)
 {
-    // To be implemented.
+    if(argc<=1){
+        return -1;
+    }
+    char *temp=*(argv+1);
+    if(*temp=='-'){
+        temp++;
+        if(*(temp+1)=='\0'){
+            if(*temp=='h'){
+                global_options=1;
+                    printf("global is: %d\n", global_options);
+                return 0;
+            }
+            else if(*temp=='c'){
+                if(argc==2){
+                    global_options=1024;
+                    global_options=(global_options<<16)+2;
+                    printf("global is: %d\n", global_options);
+                    return 0;
+                }
+                else if(argc==4){
+                    temp=*(argv+2);
+                    if(*temp=='-'&&*(temp+1)=='b'&&*(temp+2)=='\0'){
+                        unsigned x=0;
+                        for(temp=*(argv+3);*temp!='\0';temp++){
+                            if(*temp>='0'&&*temp<='9'){
+                                x=x*10+(*temp-'0');
+                            }
+                            else{
+                                return -1;
+                            }
+                        }
+                        if(x>=1&&x<=1024){
+                            x<<=16;
+                            global_options=x+2;
+                            printf("global is: %d x is: %d\n", global_options, x);
+                            return 0;
+                        }
+                    }
+                }
+            }
+            else if(*temp=='d'){
+                if(argc==2){
+                    global_options=4;
+                    printf("global is: %d\n", global_options);
+                    return 0;
+                }
+            }
+        }
+    }
     return -1;
 }
