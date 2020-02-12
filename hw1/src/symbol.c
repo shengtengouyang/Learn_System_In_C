@@ -65,6 +65,10 @@ SYMBOL *new_symbol(int value, SYMBOL *rule) {
     }
     result->value=value;
     result->rule=rule;
+    result->next=0;
+    result->prev=0;
+    result->nextr=0;
+    result->prevr=0;
     return result
     // To be implemented.
 }
