@@ -12,13 +12,15 @@
  * Initialization of this global variable that could not be performed in the header file.
  */
 int next_nonterminal_value = FIRST_NONTERMINAL;
-
+SYMBOL* recycled_symbols_list=NULL;
 /**
  * Initialize the symbols module.
  * Frees all symbols, setting num_symbols to 0, and resets next_nonterminal_value
  * to FIRST_NONTERMINAL;
  */
 void init_symbols(void) {
+    num_symbols=0;
+    next_nonterminal_value=FIRST_NONTERMINAL;
     // To be implemented.
 }
 
@@ -46,8 +48,25 @@ void init_symbols(void) {
  * allocation.
  */
 SYMBOL *new_symbol(int value, SYMBOL *rule) {
+    if(num_symbols==MAX_SYMBOLS){
+        fprintf(stderr, "%s\n", "Max number of symbols reached");
+        abort();
+        return NULL;
+    }
+    SYMBOL *result;
+    if(recycled_symbols_list==NULL){
+        result=symbol_storage+num_symbols;
+        num_symbols++;
+    }
+    else{
+        result=recycled_symbols_list;
+        recycled_symbols_list= recycled_symbols_list->prev==NULL?NULL:recycled_symbols_list->prev;
+        recycled_symbols_list->next=NULL;
+    }
+    result->value=value;
+    result->rule=rule;
+    return result
     // To be implemented.
-    return NULL;
 }
 
 /**
@@ -62,5 +81,18 @@ SYMBOL *new_symbol(int value, SYMBOL *rule) {
  * next field of the SYMBOL structure to chain together the entries.
  */
 void recycle_symbol(SYMBOL *s) {
+    if (recycled_symbols_list==NULL)
+    {
+        recycled_symbols_list=s;
+        recycled_symbols_list->prev=NULL;
+        recycled_symbols_list->next=NULL;
+    }
+    else{
+        recycled_symbols_list->next=s;
+        s->prev=recycled_symbols_list;
+        s->next=NULL;
+        recycled_symbols_list=s;
+    }
+
     // To be implemented.
 }
