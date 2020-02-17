@@ -51,7 +51,6 @@ SYMBOL *new_symbol(int value, SYMBOL *rule) {
     if(num_symbols==MAX_SYMBOLS){
         fprintf(stderr, "%s\n", "Max number of symbols reached");
         abort();
-        return NULL;
     }
     SYMBOL *result;
     if(recycled_symbols_list==NULL){
@@ -69,7 +68,7 @@ SYMBOL *new_symbol(int value, SYMBOL *rule) {
     result->prev=0;
     result->nextr=0;
     result->prevr=0;
-    return result
+    return result;
     // To be implemented.
 }
 

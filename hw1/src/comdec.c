@@ -58,6 +58,81 @@ int compress(FILE *in, FILE *out, int bsize) {
     return EOF;
 }
 
+int numBytes(int character){
+    if((character&0xF8)==0xF0)
+        return 4;
+    else if((character&0xF0)==0xE0)
+        return 3;
+    else if((character&0xE0)==0xC0)
+        return 2;
+    else if ((character&0x80)==0)
+        return 1;
+    return 0;
+}
+int converLaterBytes(FILE *in, int num){
+    int result=0;
+    while(num>1){
+        int b=fgetc(in);
+        if (b==EOF){
+            return -1;
+        }
+        if ((b&0XC0)==0x80){
+            b=b^0x80;
+            result<<=6;
+            result+=b;
+            num--;
+        }
+        else{
+            return -1;
+        }
+    }
+    return result;
+}
+
+int convert(FILE *in, int b1){
+    int num=numBytes(b1);
+    int blater;
+    switch (num){
+        case 1:
+            return b1;
+        case 2:
+            b1=b1^0xC0;
+            break;
+        case 3:
+            b1=b1^0xE0;
+            break;
+        case 4:
+            b1=b1^0xF0;
+            break;
+        default:
+            return -1;
+    }
+    blater=converLaterBytes(in, num);
+    if(blater==-1){
+        return -1;
+    }
+    return (b1<<6)+blater;
+}
+void add_symbol(SYMBOL *symbol, SYMBOL *currentRule){
+    SYMBOL *temp;
+    temp=currentRule->prev;
+    currentRule->prev=symbol;
+    temp->next=symbol;
+    symbol->prev=temp;
+    symbol->next=currentRule;
+}
+
+void expands(FILE *out, SYMBOL *currentRule){
+    SYMBOL *currentSymbol=currentRule->next;
+    while(currentSymbol!=currentRule){
+        if(IS_NONTERMINAL(currentSymbol)){
+            expands(out, currentSymbol->rule);
+        }
+        fputc(currentSymbol->value, out);
+        currentSymbol=currentSymbol->next;
+    }
+}
+
 /**
  * Main decompression function.
  * Reads a compressed data transmission from an input stream, expands it,
@@ -69,8 +144,51 @@ int compress(FILE *in, FILE *out, int bsize) {
  * @return  The number of bytes written, in case of success, otherwise EOF.
  */
 int decompress(FILE *in, FILE *out) {
+    int character;
+    int num=0;
+    int rulePosition=0;
+    SYMBOL *currentRule;
+    while((character=fgetc(in))!=EOF){
+        if(character==0x81||character==0x83||character==0x85){
+            continue;
+        }
+        else if(character==0x82){
+            break;
+        }
+        else if(character==0x84){
+            init_symbols();
+            init_rules();
+        }
+        else if(character==0x85){
+            rulePosition=0;
+        }
+        //wait for check if marker needs to be checked
+        else{
+            character=convert(in, character);
+            if(character==-1){
+                return EOF;
+            }
+            else{
+                if(rulePosition==0){
+                    if(character<FIRST_NONTERMINAL){
+                        return EOF;
+                    }
+                    else{
+                        currentRule=new_rule(character);
+                        add_rule(currentRule);
+                        rulePosition++;
+                    }
+                }
+                else{
+                    add_symbol(new_symbol(character, NULL), currentRule);
+                }
+                num++;
+            }
+        }
+    }
+    expands(out, main_rule);
     // To be implemented.
-    return EOF;
+    return num;
 }
 
 /**

@@ -50,6 +50,11 @@
  * Initializes the rules by setting main_rule to NULL and clearing the rule_map.
  */
 void init_rules(void) {
+    main_rule=NULL;
+    SYMBOL **i;
+    for(i=rule_map; i<rule_map+MAX_SYMBOLS;i++){
+        *i=NULL;
+    }
     // To be implemented.
 }
 
@@ -69,8 +74,17 @@ void init_rules(void) {
  * the responsiblity of the client of this module.
  */
 SYMBOL *new_rule(int v) {
+    if(v<0x100||v>0x10FFFF){
+        return NULL;
+    }
+    SYMBOL *rule;
+    rule=new_symbol(v, 0);
+    rule->rule=rule;
+    rule->next=rule;
+    rule->prev=rule;
+    *(rule_map+v)=rule;
     // To be implemented.
-    return NULL;
+    return rule;
 }
 
 /**
@@ -85,6 +99,19 @@ SYMBOL *new_rule(int v) {
  * the list; i.e. between main_rule->prevr and main_rule.
  */
 void add_rule(SYMBOL *rule) {
+    if(main_rule==NULL){
+        rule->nextr=rule;
+        rule->prevr=rule;
+        main_rule=rule;
+    }
+    else{
+        SYMBOL *temp;
+        temp=main_rule->prevr;
+        temp->nextr=rule;
+        main_rule->prevr=rule;
+        rule->nextr=main_rule;
+        rule->prevr=temp;
+    }
     // To be implemented.
 }
 
@@ -100,6 +127,13 @@ void add_rule(SYMBOL *rule) {
  * the disposition of those symbols is the responsibility of the caller.
  */
 void delete_rule(SYMBOL *rule) {
+    SYMBOL *front=rule->prevr;
+    SYMBOL *back=rule->nextr;
+    front->nextr=back;
+    back->prev=front;
+    if(rule->refcnt==0){
+        recycle_symbol(rule);
+    }
     // To be implemented.
 }
 
@@ -111,7 +145,8 @@ void delete_rule(SYMBOL *rule) {
  */
 SYMBOL *ref_rule(SYMBOL *rule) {
     // To be implemented.
-    return NULL;
+    rule->refcnt++;
+    return rule;
 }
 
 /**
@@ -123,5 +158,12 @@ SYMBOL *ref_rule(SYMBOL *rule) {
  *
  */
 void unref_rule(SYMBOL *rule) {
+    if(rule->refcnt>0){
+        rule->refcnt--;
+    }
+    else{
+        fprintf(stderr, "%s\n", "the reference count would become negative");
+        abort();
+    }
     // To be implemented.
 }
