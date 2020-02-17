@@ -13,6 +13,9 @@
  * Clear the digram hash table.
  */
 void init_digram_hash(void) {
+    for(int i=0; i<MAX_DIGRAMS;i++){
+        *(digram_table+i)=NULL;
+    }
     // To be implemented.
 }
 
@@ -25,6 +28,18 @@ void init_digram_hash(void) {
  * symbol values) in the hash table, if there is one, otherwise NULL.
  */
 SYMBOL *digram_get(int v1, int v2) {
+    int index=DIGRAM_HASH(v1,v2);
+    int steps=0;
+    while(*(digram_table+index%MAX_DIGRAMS)!=NULL&&steps<MAX_DIGRAMS){
+        SYMBOL *first=*(digram_table+index%MAX_DIGRAMS);
+        if(first!=TOMBSTONE){
+            if(first->value==v1&&first->next->value==v2){
+                return first;
+            }
+        }
+        index++;
+        steps++;
+    }
     // To be implemented.
     return NULL;
 }
@@ -50,7 +65,23 @@ SYMBOL *digram_get(int v1, int v2) {
  * sense to do it here.
  */
 int digram_delete(SYMBOL *digram) {
-    // To be implemented.
+    if(digram->next==NULL||digram->next==digram){
+        return -1;
+    }
+    int index=DIGRAM_HASH(digram->value, digram->next->value);
+    int steps=0;
+    while(*(digram_table+index%MAX_DIGRAMS)!=NULL&&steps<MAX_DIGRAMS){
+        SYMBOL *first=*(digram_table+index%MAX_DIGRAMS);
+        if(first!=TOMBSTONE){
+            if(first->value==digram->value&&first->next->value==digram->next->value){
+                *(digram_table+index%MAX_DIGRAMS)=TOMBSTONE;
+                return 0;
+            }
+        }
+        index++;
+        steps++;
+    }
+
     return -1;
 }
 
@@ -64,6 +95,26 @@ int digram_delete(SYMBOL *digram) {
  * table being full or the given digram not being well-formed.
  */
 int digram_put(SYMBOL *digram) {
+    if(digram->next==NULL||digram->next==digram){
+        return -1;
+    }
+    int index=DIGRAM_HASH(digram->value, digram->next->value);
+    int steps=0;
+    while(*(digram_table+index%MAX_DIGRAMS)!=NULL){
+        if(steps==MAX_DIGRAMS){
+            return -1;
+        }
+        SYMBOL *first=*(digram_table+index%MAX_DIGRAMS);
+        if(first==TOMBSTONE){
+            break;
+        }
+        if(first->value==digram->value&&first->next->value==digram->next->value){
+            return 1;
+        }
+        steps++;
+        index++;
+    }
+    *(digram_table+index%MAX_DIGRAMS)=digram;
     // To be implemented.
-    return -1;
+    return 0;
 }

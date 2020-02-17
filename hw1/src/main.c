@@ -19,7 +19,6 @@
 int main(int argc, char **argv)
 {
     int ret;
-    int x;
     if(validargs(argc, argv))
         USAGE(*argv, EXIT_FAILURE);
     debug("Options: 0x%x", global_options);
