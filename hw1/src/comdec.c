@@ -111,7 +111,7 @@ int convert(FILE *in, int b1){
     if(blater==-1){
         return -1;
     }
-    return (b1<<6)+blater;
+    return (b1<<(6*(num-1)))+blater;
 }
 void add_symbol(SYMBOL *symbol, SYMBOL *currentRule){
     SYMBOL *temp;
@@ -122,15 +122,22 @@ void add_symbol(SYMBOL *symbol, SYMBOL *currentRule){
     symbol->next=currentRule;
 }
 
-void expands(FILE *out, SYMBOL *currentRule){
+int expands(FILE *out, SYMBOL *currentRule, int num){
     SYMBOL *currentSymbol=currentRule->next;
     while(currentSymbol!=currentRule){
         if(IS_NONTERMINAL(currentSymbol)){
-            expands(out, currentSymbol->rule);
+            if(currentSymbol->rule==NULL){
+                currentSymbol->rule=*(rule_map+currentSymbol->value);
+            }
+            num=expands(out, currentSymbol->rule, num);
         }
-        fputc(currentSymbol->value, out);
+        else{
+            fputc(currentSymbol->value, out);
+            num++;
+        }
         currentSymbol=currentSymbol->next;
     }
+    return num;
 }
 
 /**
@@ -144,18 +151,22 @@ void expands(FILE *out, SYMBOL *currentRule){
  * @return  The number of bytes written, in case of success, otherwise EOF.
  */
 int decompress(FILE *in, FILE *out) {
+    init_symbols();
+    init_rules();
     int character;
     int num=0;
     int rulePosition=0;
     SYMBOL *currentRule;
     while((character=fgetc(in))!=EOF){
-        if(character==0x81||character==0x83||character==0x85){
+        if(character==0x81||character==0x83){
             continue;
         }
         else if(character==0x82){
+            fflush(out);
             break;
         }
         else if(character==0x84){
+            num=expands(out, main_rule, num);
             init_symbols();
             init_rules();
         }
@@ -170,7 +181,7 @@ int decompress(FILE *in, FILE *out) {
             }
             else{
                 if(rulePosition==0){
-                    if(character<FIRST_NONTERMINAL){
+                    if(character<FIRST_NONTERMINAL||*(rule_map+character)!=NULL){
                         return EOF;
                     }
                     else{
@@ -182,11 +193,9 @@ int decompress(FILE *in, FILE *out) {
                 else{
                     add_symbol(new_symbol(character, NULL), currentRule);
                 }
-                num++;
             }
         }
     }
-    expands(out, main_rule);
     // To be implemented.
     return num;
 }
