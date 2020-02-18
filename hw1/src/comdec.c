@@ -30,7 +30,74 @@
  * any "float" or "double" variables.  IF YOU VIOLATE THIS RESTRICTION,
  * YOU WILL GET A ZERO!
  */
+int convert_utf8(int character, FILE *out, int num){
+    int bytes;
+    if(character<=0x7F){
+        bytes=1;
+    }
+    else if(character<=0x7FF){
+        bytes=2;
+    }
+    else if(character<=0xFFFF){
+        bytes=3;
+    }
+    else if(character<=0x10FFFF){
+        bytes=4;
+    }
+    switch(bytes){
+        case 1:
+            fputc(character, out);
+            num+=1;
+            break;
+        case 2:
+            fputc((character>>6)^0xC0, out);
+            fputc((character&0x3F)^0x80, out);
+            num+=2;
+            break;
+        case 3:
+            fputc((character>>12)^0xE0, out);
+            fputc(((character>>6)&0x3F)^0x80, out);
+            fputc((character&0x3F)^0x80, out);
+            num+=3;
+            break;
+        case 4:
+            fputc((character>>18)^0xF0, out);
+            fputc(((character>>12)&0x3F)^0x80, out);
+            fputc(((character>>6)&0x3F)^0x80, out);
+            fputc((character&0x3F)^0x80, out);
+            num+=4;
+            break;
+        default:
+            return -1;
+    }
+    return num;
+}
 
+int traverseRules(FILE *out, int num){
+    SYMBOL *currentRule=main_rule;
+    SYMBOL *currentSymbol=currentRule;
+    while(1){
+        int character=currentSymbol->value;
+        num=convert_utf8(character, out, num);
+        if(num==-1){
+            return -1;
+        }
+        if(currentSymbol->next==currentRule){
+            if(currentRule->nextr==main_rule){
+                num++;
+                fputc(0x84, out);
+                break;
+            }
+            else{
+                num++;
+                fputc(0x85, out);
+                currentRule=currentRule->nextr;
+                currentSymbol=currentRule;
+            }
+        }
+    }
+    return num;
+}
 /**
  * Main compression function.
  * Reads a sequence of bytes from a specified input stream, segments the
@@ -54,8 +121,43 @@
  * otherwise EOF.
  */
 int compress(FILE *in, FILE *out, int bsize) {
+    int character;
+    int num=0;
+    init_symbols();
+    init_rules();
+    init_digram_hash();
+    fputc(0x81, out);
+    num++;
+    int currentSize=0;
+    while((character=fgetc(in))!=EOF){
+        if(currentSize==0){
+            fputc(0x83, out);
+            num++;
+            add_rule(new_rule(next_nonterminal_value));
+        }
+        else if(currentSize==bsize){
+            num=traverseRules(out, num);
+            if(num==-1){
+                return EOF;
+            }
+            init_symbols();
+            init_rules();
+            init_digram_hash();
+            currentSize=0;
+            continue;
+        }
+        SYMBOL *last=new_symbol(character, NULL);
+        insert_after(main_rule->prev, last);
+        check_digram(last->prev);
+        currentSize++;
+    }
+    if(currentSize!=0){
+        num=traverseRules(out,num);
+    }
+    fputc(0x82, out);
+    num++;
     // To be implemented.
-    return EOF;
+    return num;
 }
 
 int numBytes(int character){
@@ -227,14 +329,12 @@ int validargs(int argc, char **argv)
         if(*(temp+1)=='\0'){
             if(*temp=='h'){
                 global_options=1;
-                    printf("global is: %d\n", global_options);
                 return 0;
             }
             else if(*temp=='c'){
                 if(argc==2){
                     global_options=1024;
                     global_options=(global_options<<16)+2;
-                    printf("global is: %d\n", global_options);
                     return 0;
                 }
                 else if(argc==4){
@@ -252,7 +352,6 @@ int validargs(int argc, char **argv)
                         if(x>=1&&x<=1024){
                             x<<=16;
                             global_options=x+2;
-                            printf("global is: %d x is: %d\n", global_options, x);
                             return 0;
                         }
                     }
@@ -261,7 +360,6 @@ int validargs(int argc, char **argv)
             else if(*temp=='d'){
                 if(argc==2){
                     global_options=4;
-                    printf("global is: %d\n", global_options);
                     return 0;
                 }
             }
