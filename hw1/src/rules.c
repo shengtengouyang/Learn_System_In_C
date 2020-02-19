@@ -52,7 +52,7 @@
 void init_rules(void) {
     main_rule=NULL;
     SYMBOL **i;
-    for(i=rule_map; i<rule_map+MAX_SYMBOLS;i++){
+    for(i=rule_map; i<rule_map+SYMBOL_VALUE_MAX;i++){
         *i=NULL;
     }
     // To be implemented.
@@ -83,6 +83,7 @@ SYMBOL *new_rule(int v) {
     rule->next=rule;
     rule->prev=rule;
     *(rule_map+v)=rule;
+    debug("New rule [%lu] for %d", SYMBOL_INDEX(rule),rule->value);
     // To be implemented.
     return rule;
 }
@@ -112,6 +113,7 @@ void add_rule(SYMBOL *rule) {
         rule->nextr=main_rule;
         rule->prevr=temp;
     }
+    debug("add rule [%lu]", SYMBOL_INDEX(rule));
     // To be implemented.
 }
 
@@ -127,10 +129,16 @@ void add_rule(SYMBOL *rule) {
  * the disposition of those symbols is the responsibility of the caller.
  */
 void delete_rule(SYMBOL *rule) {
+    if(rule==NULL){
+        return;
+    }
+    if(rule==main_rule){
+        main_rule=NULL;
+    }
     SYMBOL *front=rule->prevr;
     SYMBOL *back=rule->nextr;
     front->nextr=back;
-    back->prev=front;
+    back->prevr=front;
     if(rule->refcnt==0){
         recycle_symbol(rule);
     }
@@ -145,6 +153,7 @@ void delete_rule(SYMBOL *rule) {
  */
 SYMBOL *ref_rule(SYMBOL *rule) {
     // To be implemented.
+    debug("Reference rule [%lu] %d -> %d", SYMBOL_INDEX(rule), rule->refcnt, rule->refcnt+1);
     rule->refcnt++;
     return rule;
 }
@@ -159,6 +168,7 @@ SYMBOL *ref_rule(SYMBOL *rule) {
  */
 void unref_rule(SYMBOL *rule) {
     if(rule->refcnt>0){
+        debug("Unreference rule [%lu] for %d: %d -> %d", SYMBOL_INDEX(rule), rule->value, rule->refcnt, rule->refcnt-1);
         rule->refcnt--;
     }
     else{

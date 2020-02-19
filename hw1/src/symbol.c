@@ -59,15 +59,22 @@ SYMBOL *new_symbol(int value, SYMBOL *rule) {
     }
     else{
         result=recycled_symbols_list;
-        recycled_symbols_list= recycled_symbols_list->prev==NULL?NULL:recycled_symbols_list->prev;
-        recycled_symbols_list->next=NULL;
+        recycled_symbols_list=recycled_symbols_list->prev;
+        if(recycled_symbols_list){
+            recycled_symbols_list->next=NULL;
+        }
+    }
+    if(rule){
+        ref_rule(rule);
     }
     result->value=value;
     result->rule=rule;
+    result->refcnt=0;
     result->next=0;
     result->prev=0;
     result->nextr=0;
     result->prevr=0;
+    debug("New %s symbol <%lu> (value=%d)", IS_TERMINAL(result)?"terminal":"nonterminal", SYMBOL_INDEX(result),result->value);
     return result;
     // To be implemented.
 }
@@ -84,6 +91,7 @@ SYMBOL *new_symbol(int value, SYMBOL *rule) {
  * next field of the SYMBOL structure to chain together the entries.
  */
 void recycle_symbol(SYMBOL *s) {
+    debug("recycle symbol <%lu>", SYMBOL_INDEX(s));
     if (recycled_symbols_list==NULL)
     {
         recycled_symbols_list=s;

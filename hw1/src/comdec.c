@@ -95,6 +95,9 @@ int traverseRules(FILE *out, int num){
                 currentSymbol=currentRule;
             }
         }
+        else{
+            currentSymbol=currentSymbol->next;
+        }
     }
     return num;
 }
@@ -134,8 +137,10 @@ int compress(FILE *in, FILE *out, int bsize) {
             fputc(0x83, out);
             num++;
             add_rule(new_rule(next_nonterminal_value));
+            next_nonterminal_value++;
         }
         else if(currentSize==bsize){
+            debug("one block ends----------------------------------------------------------------");
             num=traverseRules(out, num);
             if(num==-1){
                 return EOF;
@@ -153,8 +158,12 @@ int compress(FILE *in, FILE *out, int bsize) {
     }
     if(currentSize!=0){
         num=traverseRules(out,num);
+        if(num==-1){
+            return EOF;
+        }
     }
     fputc(0x82, out);
+    fflush(out);
     num++;
     // To be implemented.
     return num;

@@ -28,18 +28,21 @@ void init_digram_hash(void) {
  * symbol values) in the hash table, if there is one, otherwise NULL.
  */
 SYMBOL *digram_get(int v1, int v2) {
+    debug("look up digram (%d, %d)", v1, v2);
     int index=DIGRAM_HASH(v1,v2);
     int steps=0;
     while(*(digram_table+index%MAX_DIGRAMS)!=NULL&&steps<MAX_DIGRAMS){
         SYMBOL *first=*(digram_table+index%MAX_DIGRAMS);
         if(first!=TOMBSTONE){
             if(first->value==v1&&first->next->value==v2){
+                debug("digram <%lu> found at index %d", SYMBOL_INDEX(first), index%MAX_DIGRAMS);
                 return first;
             }
         }
         index++;
         steps++;
     }
+    debug("digram not found");
     // To be implemented.
     return NULL;
 }
@@ -65,22 +68,25 @@ SYMBOL *digram_get(int v1, int v2) {
  * sense to do it here.
  */
 int digram_delete(SYMBOL *digram) {
-    if(digram->next==NULL||digram->next==digram){
+    if(digram==NULL||digram->next==NULL){
         return -1;
     }
+    debug("Delete digram [%lu] (%d, %d) from table",SYMBOL_INDEX(digram),digram->value, digram->next->value);
     int index=DIGRAM_HASH(digram->value, digram->next->value);
     int steps=0;
     while(*(digram_table+index%MAX_DIGRAMS)!=NULL&&steps<MAX_DIGRAMS){
         SYMBOL *first=*(digram_table+index%MAX_DIGRAMS);
         if(first!=TOMBSTONE){
-            if(first->value==digram->value&&first->next->value==digram->next->value){
+            if(first==digram){
                 *(digram_table+index%MAX_DIGRAMS)=TOMBSTONE;
+                debug("delete entry at %d", index%MAX_DIGRAMS);
                 return 0;
             }
         }
         index++;
         steps++;
     }
+    debug("delete error: not found");
 
     return -1;
 }
@@ -95,7 +101,7 @@ int digram_delete(SYMBOL *digram) {
  * table being full or the given digram not being well-formed.
  */
 int digram_put(SYMBOL *digram) {
-    if(digram->next==NULL||digram->next==digram){
+    if(digram==NULL||digram->next==NULL){
         return -1;
     }
     int index=DIGRAM_HASH(digram->value, digram->next->value);
@@ -108,13 +114,15 @@ int digram_put(SYMBOL *digram) {
         if(first==TOMBSTONE){
             break;
         }
-        if(first->value==digram->value&&first->next->value==digram->next->value){
+        if(first==digram){
             return 1;
         }
         steps++;
         index++;
     }
     *(digram_table+index%MAX_DIGRAMS)=digram;
+    debug("add digram (%d, %d) to table", digram->value, digram->next->value);
+    debug("add entry at index %d", index%MAX_DIGRAMS);
     // To be implemented.
     return 0;
 }
