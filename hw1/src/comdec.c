@@ -124,7 +124,6 @@ int traverseRules(FILE *out, int num){
  * otherwise EOF.
  */
 int compress(FILE *in, FILE *out, int bsize) {
-    debug("bSize is %d----------------------------------------------------------", bsize);
     int character;
     int num=0;
     init_symbols();
@@ -137,10 +136,6 @@ int compress(FILE *in, FILE *out, int bsize) {
         if(currentSize==0){
             fputc(0x83, out);
             num++;
-            init_symbols();
-            init_rules();
-            init_digram_hash();
-            debug("next nonterminalvalue: %d-------------------------------------------------", next_nonterminal_value);
             add_rule(new_rule(next_nonterminal_value));
             next_nonterminal_value++;
         }
@@ -150,6 +145,9 @@ int compress(FILE *in, FILE *out, int bsize) {
             if(num==-1){
                 return EOF;
             }
+            init_symbols();
+            init_rules();
+            init_digram_hash();
             currentSize=0;
             continue;
         }
