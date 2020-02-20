@@ -28,7 +28,7 @@ int main(int argc, char **argv)
         decompress(stdin, stdout);
     }
     if(global_options & 2){
-        compress(stdin, stdout, global_options^2);
+        compress(stdin, stdout, (global_options>>16)*1024);
     }
 
     return EXIT_SUCCESS;

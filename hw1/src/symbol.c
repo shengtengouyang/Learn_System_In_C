@@ -19,8 +19,19 @@ SYMBOL* recycled_symbols_list=NULL;
  * to FIRST_NONTERMINAL;
  */
 void init_symbols(void) {
+    for(int i=0; i<MAX_SYMBOLS; i++){
+        SYMBOL *symbols=symbol_storage+i;
+        symbols->value=0;
+        symbols->rule=0;
+        symbols->refcnt=0;
+        symbols->next=0;
+        symbols->prev=0;
+        symbols->nextr=0;
+        symbols->prevr=0;
+    }
     num_symbols=0;
     next_nonterminal_value=FIRST_NONTERMINAL;
+    recycled_symbols_list=NULL;
     // To be implemented.
 }
 
