@@ -236,6 +236,7 @@ void add_symbol(SYMBOL *symbol, SYMBOL *currentRule){
 }
 
 int expands(FILE *out, SYMBOL *currentRule, int num){
+    debug("start expanding rules with num=%d", num);
     SYMBOL *currentSymbol=currentRule->next;
     while(currentSymbol!=currentRule){
         if(IS_NONTERMINAL(currentSymbol)){
@@ -282,6 +283,8 @@ int decompress(FILE *in, FILE *out) {
             num=expands(out, main_rule, num);
             init_symbols();
             init_rules();
+            rulePosition=0;
+            debug("start a new block with num %d, next_nonterminal_value: %d", num, next_nonterminal_value);
         }
         else if(character==0x85){
             rulePosition=0;
