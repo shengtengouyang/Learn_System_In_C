@@ -124,6 +124,7 @@ int traverseRules(FILE *out, int num){
  * otherwise EOF.
  */
 int compress(FILE *in, FILE *out, int bsize) {
+    debug("bSize is %d----------------------------------------------------------", bsize);
     int character;
     int num=0;
     init_symbols();
@@ -136,6 +137,10 @@ int compress(FILE *in, FILE *out, int bsize) {
         if(currentSize==0){
             fputc(0x83, out);
             num++;
+            init_symbols();
+            init_rules();
+            init_digram_hash();
+            debug("next nonterminalvalue: %d-------------------------------------------------", next_nonterminal_value);
             add_rule(new_rule(next_nonterminal_value));
             next_nonterminal_value++;
         }
@@ -145,9 +150,6 @@ int compress(FILE *in, FILE *out, int bsize) {
             if(num==-1){
                 return EOF;
             }
-            init_symbols();
-            init_rules();
-            init_digram_hash();
             currentSize=0;
             continue;
         }
@@ -234,7 +236,6 @@ void add_symbol(SYMBOL *symbol, SYMBOL *currentRule){
 }
 
 int expands(FILE *out, SYMBOL *currentRule, int num){
-    debug("start expanding rules with num=%d", num);
     SYMBOL *currentSymbol=currentRule->next;
     while(currentSymbol!=currentRule){
         if(IS_NONTERMINAL(currentSymbol)){
@@ -281,8 +282,6 @@ int decompress(FILE *in, FILE *out) {
             num=expands(out, main_rule, num);
             init_symbols();
             init_rules();
-            rulePosition=0;
-            debug("start a new block with num %d, next_nonterminal_value: %d", num, next_nonterminal_value);
         }
         else if(character==0x85){
             rulePosition=0;
