@@ -282,6 +282,7 @@ int decompress(FILE *in, FILE *out) {
             num=expands(out, main_rule, num);
             init_symbols();
             init_rules();
+            rulePosition=0;
         }
         else if(character==0x85){
             rulePosition=0;
