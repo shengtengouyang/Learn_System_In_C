@@ -242,7 +242,7 @@ int expands(FILE *out, SYMBOL *currentRule, int num){
         if(IS_NONTERMINAL(currentSymbol)){
             if(currentSymbol->rule==NULL){
                 currentSymbol->rule=*(rule_map+currentSymbol->value);
-                if(currentSymbol->rule==currentRule){
+                if(currentSymbol->rule==currentRule||currentSymbol->rule==NULL){
                     return -1;
                 }
             }
