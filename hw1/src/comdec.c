@@ -167,6 +167,7 @@ int compress(FILE *in, FILE *out, int bsize) {
     fputc(0x82, out);
     fflush(out);
     num++;
+    debug("compression num is : %d", num);
     // To be implemented.
     return num;
 }
@@ -241,6 +242,9 @@ int expands(FILE *out, SYMBOL *currentRule, int num){
         if(IS_NONTERMINAL(currentSymbol)){
             if(currentSymbol->rule==NULL){
                 currentSymbol->rule=*(rule_map+currentSymbol->value);
+                if(currentSymbol->rule==currentRule){
+                    return -1;
+                }
             }
             num=expands(out, currentSymbol->rule, num);
         }
@@ -266,29 +270,67 @@ int expands(FILE *out, SYMBOL *currentRule, int num){
 int decompress(FILE *in, FILE *out) {
     init_symbols();
     init_rules();
+    int sot=0, blocks=0, eot=0;
     int character;
     int num=0;
     int rulePosition=0;
     SYMBOL *currentRule;
     while((character=fgetc(in))!=EOF){
-        if(character==0x81||character==0x83){
+        if(eot!=0){
+            return EOF;
+        }
+        if(character==0x81){//start of transmission
+            if(sot!=0){
+                return EOF;
+            }
+            sot+=1;
             continue;
         }
-        else if(character==0x82){
+        else if(sot==0){//if first byte is not SOT, error
+            return EOF;
+        }
+        else if(character==0x83){//start of block
+            if(blocks!=0){
+                return EOF;
+            }
+            blocks+=1;
+        }
+        else if(character==0x82){//end of transmission
+            eot+=1;
             fflush(out);
             break;
         }
-        else if(character==0x84){
+        else if(character==0x84){//end of block
+            if(blocks!=1||rulePosition==0){
+                return EOF;
+            }
+            blocks-=1;
             num=expands(out, main_rule, num);
             init_symbols();
             init_rules();
             rulePosition=0;
         }
-        else if(character==0x85){
+        else if(character==0x85){// end of a rule
+            if(blocks!=1){
+                return EOF;
+            }
+            if(currentRule==main_rule){
+                if(rulePosition<2){
+                    return EOF;
+                }
+            }
+            else{
+                if(rulePosition<3){
+                    return EOF;
+                }
+            }
             rulePosition=0;
         }
         //wait for check if marker needs to be checked
         else{
+            if(blocks!=1){
+                return EOF;
+            }
             character=convert(in, character);
             if(character==-1){
                 return EOF;
@@ -301,15 +343,16 @@ int decompress(FILE *in, FILE *out) {
                     else{
                         currentRule=new_rule(character);
                         add_rule(currentRule);
-                        rulePosition++;
                     }
                 }
                 else{
                     add_symbol(new_symbol(character, NULL), currentRule);
                 }
+                rulePosition++;
             }
         }
     }
+    debug("decompression num is : %d", num);
     // To be implemented.
     return num;
 }
