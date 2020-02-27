@@ -135,6 +135,11 @@ long            total_sizes, sizes;	/* block count */
 char            topdir[NAMELEN];	/* our starting directory */
 
 
+//add function prototype at the begining-----------------------------------------------------
+static void get_data(char *path, int cont);
+static int  chk_4_dir(char *path);
+static int  is_directory(char *path);
+//add function prototype at the begining-----------------------------------------------------
 
 /*
 ** Find the last field of a string.
@@ -165,7 +170,7 @@ int	last_subdir = FALSE;	/* the visual display */
 
 
 
-down(subdir)
+void down(subdir)
 char	*subdir;
 {
 OPEN	*dp;			/* stream from a directory */
@@ -475,7 +480,7 @@ char           *path;
   * directory, go down into it, and get the data from all files inside.
   */
 
-get_data(path,cont)
+void get_data(path,cont)
 char           *path;
 int		cont;
 {

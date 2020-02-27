@@ -6,7 +6,9 @@
 #define BUCKETS		257	/* buckets per hash table */
 #define TABLES		50	/* hash tables */
 #define EXTEND		100	/* how much space to add to a bucket */
-
+//add function protoype for vtree.c to use---------------------------------------------------------
+int h_enter(dev_t dev, ino_t ino);
+//add function protoype for vtree.c to use---------------------------------------------------------
 struct hbucket {
     int             length;	/* key space allocated */
     int             filled;	/* key space used */
