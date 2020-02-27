@@ -1,4 +1,4 @@
-/* 
+/*
    This is the customizations file.  It changes our ideas of
    how to read directories.
 */
@@ -41,6 +41,15 @@
 
 #endif
 
-#if !(defined(BSD) || !defined(SYS_V) || !defined(SYS_III) || !defined(SCO_XENIX))
+#ifdef linux
+
+#   include     <dirent.h>
+#define OPEN DIR
+#define READ struct dirent
+#define INO(x) ((x).d_ino)
+#define  NAME(x) ((x).d_name)
+#endif
+
+#if !(defined(BSD) || !defined(SYS_V) || !defined(SYS_III) || !defined(SCO_XENIX)||!defined(LINUX))
 "This is an Error"
 #endif
