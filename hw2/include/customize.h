@@ -41,9 +41,10 @@
 
 #endif
 
-#ifdef linux
+#ifdef LINUX
 
 #   include     <dirent.h>
+# include <sys/types.h>
 #define OPEN DIR
 #define READ struct dirent
 #define INO(x) ((x).d_ino)
