@@ -408,8 +408,9 @@ READ		tmp_entry;
 				/* free the allocated memory */
 	tmp_RD = head;
 	while (tmp_RD) {
+        struct RD_list *temp=tmp_RD->fptr;
 		free(tmp_RD);
-		tmp_RD = tmp_RD->fptr;
+		tmp_RD = temp;
 	}
 #endif
 
@@ -435,7 +436,7 @@ READ		tmp_entry;
 	indent-=3;
 	sub_dirs[cur_depth] = 0;
 	cur_depth--;
-
+    closedir(dp);
 	chdir(cwd);			/* go back where we were */
 
 

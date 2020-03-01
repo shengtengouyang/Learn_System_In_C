@@ -1,0 +1,6 @@
+ tests/rsrc/test_tree : 16
+   S : 40
+      a : 16
+      c : 32
+      b : 24
+      d : 16
