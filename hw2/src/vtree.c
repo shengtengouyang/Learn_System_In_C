@@ -495,8 +495,10 @@ int		i;
 	}
 	else {
 		if (is_directory(path)){
-			inodes++;
-			sizes+=stb.st_blocks/2;
+            if(strcmp(path, ".")==SAME){
+    			inodes++;
+    			sizes+=stb.st_blocks/2;
+            }
 			return;
 		}
 
