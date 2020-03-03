@@ -58,6 +58,7 @@
 // added header files----------------------------------------------------------------------------------
 #include <stdlib.h>
 #include <unistd.h>
+#include<getopt.h>
 // added header files----------------------------------------------------------------------------------
 
 #ifdef	BSD
@@ -493,14 +494,18 @@ int		i;
 			down(path);
 	}
 	else {
-		if (is_directory(path)) return;
+		if (is_directory(path)){
+			inodes++;
+			sizes+=stb.st_blocks/2;
+			return;
+		}
 
 		    /* Don't do it again if we've already done it once. */
 
 		if ( (h_enter(stb.st_dev, stb.st_ino) == OLD) && (!duplicate) )
 			return;
 		inodes++;
-		sizes+= K(stb.st_size);
+		sizes+= stb.st_blocks/2;
 	}
 } /* get_data */
 
@@ -519,8 +524,20 @@ int	user_file_list_supplied = 0;
 	Program = *argv;		/* save our name for error messages */
 
     /* Pick up options from command line */
-
-	while ((option = getopt(argc, argv, "dfh:iostqvV")) != EOF) {
+    struct option longopts[]={
+        {"duplicates",no_argument, 0, 'd'},
+        {"floating-column-widths", no_argument, 0, 'f'},
+        {"height", required_argument, 0, 'h'},
+        {"inodes", no_argument, 0, 'i'},
+        {"sort-directories", no_argument, 0, 'o'},
+        {"totals", no_argument, 0, 't'},
+        {"quick-display", no_argument, 0, 'q'},
+        {"visual-display", no_argument, 0, 'v'},
+        {"version", no_argument, 0, 'V'},
+        {0,no_argument,0,0}
+    };
+    int option_index=0;
+	while ((option = getopt_long(argc, argv, "dfh:iostqvV", longopts, &option_index)) != EOF) {
 		switch (option) {
 			case 'f':	floating = TRUE; break;
 			case 'h':	depth = atoi(optarg);
