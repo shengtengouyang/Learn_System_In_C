@@ -7,7 +7,9 @@
  *	for use on System III machines that don't have any other
  *	alternative.
  */
+#ifdef LINUX
 #include "customize.h"
+#endif
 // #include <sys/types.h>
 #define NAMELENGTH	14
 #ifdef	SYS_III

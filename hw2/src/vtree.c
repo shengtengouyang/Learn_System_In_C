@@ -50,15 +50,17 @@
 #include "patchlevel.h"
 
 #include <ctype.h>
-// #include <sys/types.h>
+#include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/param.h>
 #include <stdio.h>
 
 // added header files----------------------------------------------------------------------------------
-#include <stdlib.h>
-#include <unistd.h>
-#include<getopt.h>
+#ifdef LINUX
+    #include <stdlib.h>
+    #include <unistd.h>
+    #include<getopt.h>
+#endif
 // added header files----------------------------------------------------------------------------------
 
 #ifdef	BSD

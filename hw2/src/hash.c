@@ -15,14 +15,16 @@
 */
 
 #include <stdio.h>
-// #include <sys/types.h>
-#include "customize.h"
+#include <sys/types.h>
 #include "hash.h"
-#include <string.h>
-#include <stdlib.h>
+#ifdef LINUX
+    #include "customize.h"
+    #include <string.h>
+    #include <stdlib.h>
+#endif
 
 static struct htable *tables[TABLES];
-#ifndef linux
+#ifndef LINUX
 extern char *malloc();		/* added 6/17/88 */
 extern char *realloc();		/* added 6/17/88 */
 extern char *calloc();		/* added 6/17/88 */

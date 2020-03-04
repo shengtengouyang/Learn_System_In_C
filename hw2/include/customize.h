@@ -41,7 +41,7 @@
 
 #endif
 
-#ifdef linux
+#ifdef LINUX
 
 #   include     <dirent.h>
 # include <sys/types.h>
@@ -51,6 +51,6 @@
 #define  NAME(x) ((x).d_name)
 #endif
 
-#if !(defined(BSD) || !defined(SYS_V) || !defined(SYS_III) || !defined(SCO_XENIX)||!defined(linux))
+#if !(defined(BSD) || !defined(SYS_V) || !defined(SYS_III) || !defined(SCO_XENIX)||!defined(LINUX))
 "This is an Error"
 #endif
