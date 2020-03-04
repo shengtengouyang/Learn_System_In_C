@@ -99,8 +99,15 @@ struct RD_list {
 	struct RD_list	*fptr;
 	struct RD_list	*bptr;
 };
+int showOrder=1;
+#else
+    int showOrder=0;
 #endif
-
+#ifdef LSTAT
+int showLink=1;
+#else
+int showLink=0;
+#endif
 
 
 int		indent = 0,		/* current indent */
@@ -537,10 +544,11 @@ int	user_file_list_supplied = 0;
         {"quick-display", no_argument, 0, 'q'},
         {"visual-display", no_argument, 0, 'v'},
         {"version", no_argument, 0, 'V'},
+        {"no-follow-symlinks", no_argument, 0, 'l'},
         {0,no_argument,0,0}
     };
     int option_index=0;
-	while ((option = getopt_long(argc, argv, "dfh:iostqvV", longopts, &option_index)) != EOF) {
+	while ((option = getopt_long(argc, argv, "dfh:iolstqvV", longopts, &option_index)) != EOF) {
 		switch (option) {
 			case 'f':	floating = TRUE; break;
 			case 'h':	depth = atoi(optarg);
@@ -556,7 +564,21 @@ int	user_file_list_supplied = 0;
 					break;
 			case 'i':	cnt_inodes = TRUE;
 					break;
-			case 'o':	sort = TRUE; break;
+			case 'o':
+                    if(showOrder){
+                        sort = TRUE;
+                    }
+                    else{
+                        err=TRUE;
+                    }
+                    break;
+            case 'l':
+                    if(showLink){
+                        sw_follow_links=0;
+                    }
+                    else
+                        err=TRUE;
+                    break;
 			case 's':	sum = TRUE;
 					break;
 			case 't':	sw_summary = TRUE;
@@ -573,12 +595,17 @@ int	user_file_list_supplied = 0;
 			default:	err = TRUE;
 		}
 		if (err) {
-			fprintf(stderr,"%s: [ -d ] [ -h # ] [ -i ] [ -o ] [ -s ] [ -q ] [ -v ] [ -V ]\n",Program);
+			fprintf(stderr,"%s: [ -d ] [ -h # ] [ -i ]%s%s [ -s ] [ -q ] [ -v ] [ -V ]\n",Program, showOrder?" [ -o ]":"", showLink?" [ -l ]":"");
 			fprintf(stderr,"	-d	count duplicate inodes\n");
 			fprintf(stderr,"	-f	floating column widths\n");
 			fprintf(stderr,"	-h #	height of tree to look at\n");
 			fprintf(stderr,"	-i	count inodes\n");
-			fprintf(stderr,"	-o	sort directories before processing\n");
+            if(showOrder){
+                fprintf(stderr,"	-o	sort directories before processing\n");
+            }
+            if(showLink){
+                fprintf(stderr,"        -l      not to follow symbolic links when they are encountered\n");
+            }
 			fprintf(stderr,"	-s	include subdirectories not shown due to -h option\n");
 			fprintf(stderr,"	-t	totals at the end\n");
 			fprintf(stderr,"	-q	quick display, no counts\n");
@@ -645,7 +672,7 @@ int	user_file_list_supplied = 0;
 
 	if (sw_summary) {
 		printf("\n\nTotal space used: %ld\n",total_sizes);
-		if (cnt_inodes) printf("Total inodes: %d\n",inodes);
+		if (cnt_inodes) printf("Total inodes: %d\n",total_inodes);
 	}
 
 #ifdef HSTATS
