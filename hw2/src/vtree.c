@@ -550,7 +550,11 @@ int	user_file_list_supplied = 0;
         {0,no_argument,0,0}
     };
     int option_index=0;
-	while ((option = getopt_long(argc, argv, "dfh:iolstqvV", longopts, &option_index)) != EOF) {
+    #ifdef LINUX
+	   while ((option = getopt_long(argc, argv, "dfh:iolstqvV", longopts, &option_index)) != EOF) {
+    #else
+        while ((option = getopt(argc, argv, "dfh:iolstqvV")) != EOF) {
+    #endif
 		switch (option) {
 			case 'f':	floating = TRUE; break;
 			case 'h':	depth = atoi(optarg);
