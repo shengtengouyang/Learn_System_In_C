@@ -640,6 +640,7 @@ int	user_file_list_supplied = 0;
 			if (quick) printf("Quick display only\n");
 			if (visual) printf("Visual tree\n");
 			if (sort) printf("Sort directories before processing\n");
+            if(!sw_follow_links) printf("not to follow symbolic links when they are encountered\n");
 		}
 	}
 
