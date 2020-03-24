@@ -18,7 +18,7 @@ void add_block();
 sf_block *remove_block(sf_block *current);
 sf_block *split(sf_block *current, size_t size, int isLast);
 void coalesce(sf_block *current, sf_block *next, int isLast);
-
+int checkValid(void * ptr);
 // sf_block *remove_first_block(int index){
 //     sf_block *first=&sf_free_list_heads[index];
 //     sf_block *second=first->body.links.next;
@@ -96,6 +96,9 @@ void coalesce(sf_block *current, sf_block *next, int isLast){
 
 sf_block *new_page(sf_block *prev, sf_block *wild){
     void *end=sf_mem_end();
+    if(end==0){
+        return 0;
+    }
     epilogue=end-16;
     epilogue->header=THIS_BLOCK_ALLOCATED;
     wild->prev_footer=prev->header;
@@ -132,7 +135,7 @@ void *sf_malloc(size_t size) {
                 int isLast=i==9?1:0;
                 while(ptr!=&sf_free_list_heads[i]){
                     if(required_size<=(ptr->header&BLOCK_SIZE_MASK)){
-                        return split(ptr, size, isLast);
+                        return (void *)split(ptr, size, isLast)+16;
                     }
                     else if(required_size>(ptr->header&BLOCK_SIZE_MASK)){
                         ptr=ptr->body.links.next;
@@ -142,7 +145,10 @@ void *sf_malloc(size_t size) {
                 if(isLast){
                     sf_block *newWild=sf_mem_grow()-16;
                     sf_block *prev=epilogue-(epilogue->prev_footer&BLOCK_SIZE_MASK);
-                    new_page(prev, newWild);
+                    sf_block *newpage=new_page(prev, newWild);
+                    if(newpage==0){
+                        break;
+                    }
                     return sf_malloc(size);
                 }
             }
@@ -152,7 +158,36 @@ void *sf_malloc(size_t size) {
 }
 
 void sf_free(void *pp) {
-    return;
+    if(!checkValid(pp)){
+        abort();
+    }
+    pp=pp-16;
+    sf_block *current=pp;
+    current->header^=THIS_BLOCK_ALLOCATED;
+    sf_block *next=pp+(current->header&BLOCK_SIZE_MASK);
+    int isLast;
+    if(next==sf_free_list_heads[9].body.links.next){
+        isLast=1;
+    }
+    else{
+        isLast=0;
+    }
+    int index=checkSize(current->header&BLOCK_SIZE_MASK);
+    add_block(current, index);
+    if(!(current->header&PREV_BLOCK_ALLOCATED)){
+        sf_block *prev=pp-(current->prev_footer&BLOCK_SIZE_MASK);
+        if(!(next->header&THIS_BLOCK_ALLOCATED)){
+            coalesce(prev,next, isLast);
+        }
+        else{
+            coalesce(prev, current, 0);
+        }
+    }
+    else{
+        if(!(next->header&THIS_BLOCK_ALLOCATED)){
+            coalesce(current,next, isLast);
+        }
+    }
 }
 
 void *sf_realloc(void *pp, size_t rsize) {
@@ -161,6 +196,34 @@ void *sf_realloc(void *pp, size_t rsize) {
 
 void *sf_memalign(size_t size, size_t align) {
     return NULL;
+}
+
+int checkValid(void *ptr){
+    if(!ptr){
+        return 0;
+    }
+    if((uintptr_t)ptr%64!=0){
+        return 0;
+    }
+    ptr=ptr-16;
+    sf_block *convert=(sf_block *) ptr;
+    if(!(convert->header&THIS_BLOCK_ALLOCATED)){
+        return 0;
+    }
+    size_t size=convert->header&BLOCK_SIZE_MASK;
+    void *convert_header=&convert->header;
+    void *convert_footer=&((sf_block *)(ptr+size))->prev_footer;
+    if(convert_header<((void *)prologue+64)||convert_footer>(void *)epilogue){
+        return 0;
+    }
+    if(!(convert->header&PREV_BLOCK_ALLOCATED)){
+        size_t prev_size=convert->prev_footer&BLOCK_SIZE_MASK;
+        sf_block *prev_block=ptr-prev_size;
+        if(prev_block->header&THIS_BLOCK_ALLOCATED){
+            return 0;
+        }
+    }
+    return 1;
 }
 
 int checkSize(size_t size){
