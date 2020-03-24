@@ -52,7 +52,13 @@ void add_block(sf_block *block, int index){
 sf_block *split(sf_block *current, size_t size, int isLast){
     size_t required_size=((size+8+63)/64)*64;
     size_t current_size=current->header&BLOCK_SIZE_MASK;
-    remove_block(current);
+    int allocated=0;
+    if(current->header&THIS_BLOCK_ALLOCATED){
+        allocated=1;
+    }
+    if(!allocated){
+        remove_block(current);
+    }
     current->header|=THIS_BLOCK_ALLOCATED;
     sf_block *remain;
     sf_block *after;
@@ -72,8 +78,10 @@ sf_block *split(sf_block *current, size_t size, int isLast){
         }
     }
     else{
-        after=(void *)current+current_size;
-        after->prev_footer=0;
+        if(!allocated){
+            after=(void *)current+current_size;
+            after->prev_footer=0;
+        }
     }
     return current;
 }
