@@ -262,7 +262,7 @@ int checkValid(void *ptr){
     size_t size=convert->header&BLOCK_SIZE_MASK;
     void *convert_header=&convert->header;
     void *convert_footer=&((sf_block *)(ptr+size))->prev_footer;
-    if(convert_header<((void *)prologue+64)||convert_footer>(void *)epilogue){
+    if(convert_header<((void *)prologue+64+8)||convert_footer>(void *)epilogue){
         return 0;
     }
     if(!(convert->header&PREV_BLOCK_ALLOCATED)){
