@@ -62,22 +62,22 @@ void add_block(sf_block *block, int index){
 sf_block *split(sf_block *current, size_t size, int isLast){
     size_t required_size=((size+8+63)/64)*64;
     size_t current_size=current->header&BLOCK_SIZE_MASK;
-    int allocated=0;
-    if(current->header&THIS_BLOCK_ALLOCATED){
-        allocated=1;
-    }
-    if(!allocated){
-        remove_block(current);
-    }
+    // int allocated=0;
+    // if(current->header&THIS_BLOCK_ALLOCATED){
+    //     allocated=1;
+    // }
+    // if(!allocated){
+    //     remove_block(current);
+    // }
     sf_block *remain;
     // sf_block *after;
     if(required_size<=current_size-64){
         remain=(void *)current+required_size;
         remain->header=(current_size-required_size)|PREV_BLOCK_ALLOCATED;
         current->header-=remain->header&BLOCK_SIZE_MASK;
-        if(!allocated){
-            remain->prev_footer=0;
-        }
+        // if(!allocated){
+        //     remain->prev_footer=0;
+        // }
         // after=(void *)remain+(remain->header&BLOCK_SIZE_MASK);
         // after->prev_footer=remain->header;
         if(isLast){
@@ -154,7 +154,12 @@ void *sf_malloc(size_t size) {
                 int isLast=i==9?1:0;
                 while(ptr!=&sf_free_list_heads[i]){
                     if(required_size<=(ptr->header&BLOCK_SIZE_MASK)){
-                        return (void *)split(ptr, size, isLast)+16;
+                        ptr=split(ptr, size, isLast);
+                        if(!(ptr->header&THIS_BLOCK_ALLOCATED)){
+                            ptr=remove_block(ptr);
+                        }
+                        void *result=(void *)ptr+16;
+                        return result;
                     }
                     else if(required_size>(ptr->header&BLOCK_SIZE_MASK)){
                         ptr=ptr->body.links.next;
