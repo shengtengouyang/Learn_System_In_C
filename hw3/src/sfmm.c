@@ -31,6 +31,10 @@ int checkValid(void * ptr);
 // }
 
 sf_block *remove_block(sf_block *current){
+    current->header|=THIS_BLOCK_ALLOCATED;
+    sf_block *after=(void *)current+(current->header&BLOCK_SIZE_MASK);
+    after->prev_footer=0;
+    after->header|=PREV_BLOCK_ALLOCATED;
     sf_block *next=current->body.links.next;
     sf_block *prev=current->body.links.prev;
     prev->body.links.next=next;
@@ -41,6 +45,12 @@ sf_block *remove_block(sf_block *current){
 }
 
 void add_block(sf_block *block, int index){
+    sf_block *after=(void *)block+(block->header&BLOCK_SIZE_MASK);
+    if(block->header&THIS_BLOCK_ALLOCATED){
+        block->header^=THIS_BLOCK_ALLOCATED;
+        after->header^=PREV_BLOCK_ALLOCATED;
+    }
+    after->prev_footer=block->header;
     sf_block *first=&sf_free_list_heads[index];
     sf_block *second=first->body.links.next;
     first->body.links.next=block;
@@ -59,16 +69,17 @@ sf_block *split(sf_block *current, size_t size, int isLast){
     if(!allocated){
         remove_block(current);
     }
-    current->header|=THIS_BLOCK_ALLOCATED;
     sf_block *remain;
-    sf_block *after;
+    // sf_block *after;
     if(required_size<=current_size-64){
         remain=(void *)current+required_size;
         remain->header=(current_size-required_size)|PREV_BLOCK_ALLOCATED;
         current->header-=remain->header&BLOCK_SIZE_MASK;
-        remain->prev_footer=0;
-        after=(void *)remain+(remain->header&BLOCK_SIZE_MASK);
-        after->prev_footer=remain->header;
+        if(!allocated){
+            remain->prev_footer=0;
+        }
+        // after=(void *)remain+(remain->header&BLOCK_SIZE_MASK);
+        // after->prev_footer=remain->header;
         if(isLast){
             add_block(remain, 9);
         }
@@ -77,20 +88,20 @@ sf_block *split(sf_block *current, size_t size, int isLast){
             add_block(remain, index);
         }
     }
-    else{
-        if(!allocated){
-            after=(void *)current+current_size;
-            after->prev_footer=0;
-        }
-    }
+    // else{
+    //     if(!allocated){
+    //         after=(void *)current+current_size;
+    //         after->prev_footer=0;
+    //     }
+    // }
     return current;
 }
 
 void coalesce(sf_block *current, sf_block *next, int isLast){
     int prev_allocated=current->header&PREV_BLOCK_ALLOCATED;
     current->header=((void *)next-(void *)current+(next->header&BLOCK_SIZE_MASK))|prev_allocated;
-    sf_block *after=(void *)current+(current->header&BLOCK_SIZE_MASK);
-    after->prev_footer=current->header;
+    // sf_block *after=(void *)current+(current->header&BLOCK_SIZE_MASK);
+    // after->prev_footer=current->header;
     remove_block(current);
     remove_block(next);
     if(isLast){
@@ -114,7 +125,7 @@ sf_block *new_page(sf_block *prev, sf_block *wild){
     if(prev->header&THIS_BLOCK_ALLOCATED){
         wild->header|=PREV_BLOCK_ALLOCATED;
     }
-    epilogue->prev_footer=wild->header;
+    // epilogue->prev_footer=wild->header;
     add_block(wild, 9);
     if(!(wild->header&PREV_BLOCK_ALLOCATED)){
         coalesce(prev, wild, 1);
@@ -171,7 +182,7 @@ void sf_free(void *pp) {
     }
     pp=pp-16;
     sf_block *current=pp;
-    current->header^=THIS_BLOCK_ALLOCATED;
+    // current->header^=THIS_BLOCK_ALLOCATED;
     sf_block *next=pp+(current->header&BLOCK_SIZE_MASK);
     int isLast;
     if(next==sf_free_list_heads[9].body.links.next){
@@ -199,6 +210,31 @@ void sf_free(void *pp) {
 }
 
 void *sf_realloc(void *pp, size_t rsize) {
+    if(!checkValid(pp)){
+        abort();
+    }
+    if(rsize==0){
+        sf_free(pp);
+        return NULL;
+    }
+    sf_block *ptr=pp-16;
+    size_t required_size=(rsize+8+63)/64*64;
+    if(required_size>(ptr->header&BLOCK_SIZE_MASK)){
+        void *larger=sf_malloc(rsize);
+        if(larger==0){
+            return NULL;
+        }
+        memcpy(larger, pp, (ptr->header&BLOCK_SIZE_MASK)-8);
+        sf_free(pp);
+        return larger;
+    }
+    else{
+        int isLast=0;
+        if(pp-16+(ptr->header&BLOCK_SIZE_MASK)==epilogue){
+            isLast=1;
+        }
+        return (void *)split(ptr, rsize, isLast)+16;
+    }
     return NULL;
 }
 
