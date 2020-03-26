@@ -8,6 +8,7 @@
 #include <string.h>
 #include "debug.h"
 #include "sfmm.h"
+#include <errno.h>
 #define M 64
 void *heap;
 sf_block *prologue;
@@ -16,7 +17,7 @@ int checkSize(size_t size);
 void initLists();
 void add_block();
 sf_block *remove_block(sf_block *current);
-sf_block *split(sf_block *current, size_t size, int isLast);
+sf_block *split(sf_block *current, size_t size, int isLast, int alignment);
 void coalesce(sf_block *current, sf_block *next, int isLast);
 int checkValid(void * ptr);
 // sf_block *remove_first_block(int index){
@@ -33,7 +34,6 @@ int checkValid(void * ptr);
 sf_block *remove_block(sf_block *current){
     current->header|=THIS_BLOCK_ALLOCATED;
     sf_block *after=(void *)current+(current->header&BLOCK_SIZE_MASK);
-    after->prev_footer=0;
     after->header|=PREV_BLOCK_ALLOCATED;
     sf_block *next=current->body.links.next;
     sf_block *prev=current->body.links.prev;
@@ -59,8 +59,8 @@ void add_block(sf_block *block, int index){
     block->body.links.prev=first;
 }
 
-sf_block *split(sf_block *current, size_t size, int isLast){
-    size_t required_size=((size+8+63)/64)*64;
+sf_block *split(sf_block *current, size_t size, int isLast, int alignment){
+    size_t required_size=((size+8+alignment-1)/alignment)*alignment;
     size_t current_size=current->header&BLOCK_SIZE_MASK;
     // int allocated=0;
     // if(current->header&THIS_BLOCK_ALLOCATED){
@@ -71,7 +71,7 @@ sf_block *split(sf_block *current, size_t size, int isLast){
     // }
     sf_block *remain;
     // sf_block *after;
-    if(required_size<=current_size-64){
+    if(required_size<=current_size-M){
         remain=(void *)current+required_size;
         remain->header=(current_size-required_size)|PREV_BLOCK_ALLOCATED;
         current->header-=remain->header&BLOCK_SIZE_MASK;
@@ -115,9 +115,6 @@ void coalesce(sf_block *current, sf_block *next, int isLast){
 
 sf_block *new_page(sf_block *prev, sf_block *wild){
     void *end=sf_mem_end();
-    if(end==0){
-        return 0;
-    }
     epilogue=end-16;
     epilogue->header=THIS_BLOCK_ALLOCATED;
     wild->prev_footer=prev->header;
@@ -139,7 +136,7 @@ void *sf_malloc(size_t size) {
         initLists();
         prologue=heap+48;
         prologue->header=M|THIS_BLOCK_ALLOCATED|PREV_BLOCK_ALLOCATED;
-        new_page(prologue, (void*)prologue+64);
+        new_page(prologue, (void*)prologue+M);
         return sf_malloc(size);
     }
     else{
@@ -150,11 +147,11 @@ void *sf_malloc(size_t size) {
             int index=checkSize(size+8);
             for(int i=index; i<NUM_FREE_LISTS; i++){
                 sf_block *ptr=sf_free_list_heads[i].body.links.next;
-                size_t required_size=((size+8+63)/64)*64;
+                size_t required_size=((size+8+63)/M)*M;
                 int isLast=i==9?1:0;
                 while(ptr!=&sf_free_list_heads[i]){
                     if(required_size<=(ptr->header&BLOCK_SIZE_MASK)){
-                        ptr=split(ptr, size, isLast);
+                        ptr=split(ptr, size, isLast, M);
                         if(!(ptr->header&THIS_BLOCK_ALLOCATED)){
                             ptr=remove_block(ptr);
                         }
@@ -167,8 +164,12 @@ void *sf_malloc(size_t size) {
                     }
                 }
                 if(isLast){
-                    sf_block *newWild=sf_mem_grow()-16;
-                    sf_block *prev=epilogue-(epilogue->prev_footer&BLOCK_SIZE_MASK);
+                    void *grow=sf_mem_grow();
+                    if(!grow){
+                        return NULL;
+                    }
+                    sf_block *newWild=grow-16;
+                    sf_block *prev=(void *)epilogue-(epilogue->prev_footer&BLOCK_SIZE_MASK);
                     sf_block *newpage=new_page(prev, newWild);
                     if(newpage==0){
                         break;
@@ -190,14 +191,19 @@ void sf_free(void *pp) {
     // current->header^=THIS_BLOCK_ALLOCATED;
     sf_block *next=pp+(current->header&BLOCK_SIZE_MASK);
     int isLast;
-    if(next==sf_free_list_heads[9].body.links.next){
+    if(next==epilogue-(next->header&BLOCK_SIZE_MASK)){
         isLast=1;
     }
     else{
         isLast=0;
     }
-    int index=checkSize(current->header&BLOCK_SIZE_MASK);
-    add_block(current, index);
+    if(!isLast){
+        int index=checkSize(current->header&BLOCK_SIZE_MASK);
+        add_block(current, index);
+    }
+    else{
+        add_block(current, 9);
+    }
     if(!(current->header&PREV_BLOCK_ALLOCATED)){
         sf_block *prev=pp-(current->prev_footer&BLOCK_SIZE_MASK);
         if(!(next->header&THIS_BLOCK_ALLOCATED)){
@@ -223,7 +229,7 @@ void *sf_realloc(void *pp, size_t rsize) {
         return NULL;
     }
     sf_block *ptr=pp-16;
-    size_t required_size=(rsize+8+63)/64*64;
+    size_t required_size=(rsize+8+63)/M*M;
     if(required_size>(ptr->header&BLOCK_SIZE_MASK)){
         void *larger=sf_malloc(rsize);
         if(larger==0){
@@ -238,20 +244,42 @@ void *sf_realloc(void *pp, size_t rsize) {
         if(pp-16+(ptr->header&BLOCK_SIZE_MASK)==epilogue){
             isLast=1;
         }
-        return (void *)split(ptr, rsize, isLast)+16;
+        return (void *)split(ptr, rsize, isLast, M)+16;
     }
     return NULL;
 }
 
 void *sf_memalign(size_t size, size_t align) {
-    return NULL;
+    if(align<M || align%2!=0){
+        sf_errno=EINVAL;
+        return NULL;
+    }
+    size_t attempt=size+align+M;
+    void * initial =sf_malloc(attempt);
+    sf_block *current=initial-16;
+    int check=(uintptr_t)initial%align==0?1:0;
+    int isLast=current==epilogue-(current->header&BLOCK_SIZE_MASK)?1:0;
+    if(!check){
+        size_t free_size=((uintptr_t)initial/align+1)*align-(uintptr_t)initial;
+        // void *ptr=initial+x;
+        // sf_block *next=ptr-16;
+        current=split(current, free_size-8, isLast, M);
+        current=initial+free_size-16;
+        remove_block(current);
+        sf_free(initial);
+    }
+    current=split(current, size, isLast, align);
+    if(!(current->header&THIS_BLOCK_ALLOCATED)){
+        current=remove_block(current);
+    }
+    return (void *)current+16;
 }
 
 int checkValid(void *ptr){
     if(!ptr){
         return 0;
     }
-    if((uintptr_t)ptr%64!=0){
+    if((uintptr_t)ptr%M!=0){
         return 0;
     }
     ptr=ptr-16;
@@ -262,7 +290,7 @@ int checkValid(void *ptr){
     size_t size=convert->header&BLOCK_SIZE_MASK;
     void *convert_header=&convert->header;
     void *convert_footer=&((sf_block *)(ptr+size))->prev_footer;
-    if(convert_header<((void *)prologue+64+8)||convert_footer>(void *)epilogue){
+    if(convert_header<((void *)prologue+M+8)||convert_footer>(void *)epilogue){
         return 0;
     }
     if(!(convert->header&PREV_BLOCK_ALLOCATED)){
