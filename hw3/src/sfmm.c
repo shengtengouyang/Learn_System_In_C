@@ -45,18 +45,36 @@ sf_block *remove_block(sf_block *current){
 }
 
 void add_block(sf_block *block, int index){
-    sf_block *after=(void *)block+(block->header&BLOCK_SIZE_MASK);
-    if(block->header&THIS_BLOCK_ALLOCATED){
-        block->header^=THIS_BLOCK_ALLOCATED;
-        after->header^=PREV_BLOCK_ALLOCATED;
-    }
-    after->prev_footer=block->header;
+
     sf_block *first=&sf_free_list_heads[index];
     sf_block *second=first->body.links.next;
     first->body.links.next=block;
     second->body.links.prev=block;
     block->body.links.next=second;
     block->body.links.prev=first;
+
+    sf_block *after=(void *)block+(block->header&BLOCK_SIZE_MASK);
+    if(block->header&THIS_BLOCK_ALLOCATED){
+        block->header^=THIS_BLOCK_ALLOCATED;
+        after->header^=PREV_BLOCK_ALLOCATED;
+    }
+    after->prev_footer=block->header;
+    int isLast=index==9?1:0;
+    int afterisLast=after==sf_free_list_heads[9].body.links.next?1:0;
+    if(!(block->header&PREV_BLOCK_ALLOCATED)){
+        sf_block *prev=(void *)block-(block->prev_footer&BLOCK_SIZE_MASK);
+        if(!(after->header&THIS_BLOCK_ALLOCATED)){
+            coalesce(prev,after, afterisLast);
+        }
+        else{
+            coalesce(prev, block, isLast);
+        }
+    }
+    else{
+        if(!(after->header&THIS_BLOCK_ALLOCATED)){
+            coalesce(block, after, afterisLast);
+        }
+    }
 }
 
 sf_block *split(sf_block *current, size_t size, int isLast, int alignment){
@@ -124,11 +142,12 @@ sf_block *new_page(sf_block *prev, sf_block *wild){
     }
     // epilogue->prev_footer=wild->header;
     add_block(wild, 9);
-    if(!(wild->header&PREV_BLOCK_ALLOCATED)){
-        coalesce(prev, wild, 1);
-        return prev;
-    }
-    return wild;
+    return sf_free_list_heads[9].body.links.next;
+    // if(!(wild->header&PREV_BLOCK_ALLOCATED)){
+    //     coalesce(prev, wild, 1);
+    //     return prev;
+    // }
+    // return wild;
 }
 void *sf_malloc(size_t size) {
     if(heap==0){
@@ -203,20 +222,6 @@ void sf_free(void *pp) {
     }
     else{
         add_block(current, 9);
-    }
-    if(!(current->header&PREV_BLOCK_ALLOCATED)){
-        sf_block *prev=pp-(current->prev_footer&BLOCK_SIZE_MASK);
-        if(!(next->header&THIS_BLOCK_ALLOCATED)){
-            coalesce(prev,next, isLast);
-        }
-        else{
-            coalesce(prev, current, 0);
-        }
-    }
-    else{
-        if(!(next->header&THIS_BLOCK_ALLOCATED)){
-            coalesce(current,next, isLast);
-        }
     }
 }
 
