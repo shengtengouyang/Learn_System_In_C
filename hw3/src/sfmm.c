@@ -14,22 +14,13 @@ void *heap;
 sf_block *prologue;
 sf_block *epilogue;
 int checkSize(size_t size);
+int checkValid(void *ptr);
 void initLists();
-void add_block();
+sf_block *new_page(sf_block *wild);
+void add_block(sf_block *block, int index);
 sf_block *remove_block(sf_block *current);
 sf_block *split(sf_block *current, size_t size, int isLast, int alignment);
 void coalesce(sf_block *current, sf_block *next, int isLast);
-int checkValid(void * ptr);
-// sf_block *remove_first_block(int index){
-//     sf_block *first=&sf_free_list_heads[index];
-//     sf_block *second=first->body.links.next;
-//     sf_block *third=second->body.links.next;
-//     first->body.links.next=third;
-//     third->body.links.prev=first;
-//     second->body.links.prev=0;
-//     second->body.links.next=0;
-//     return second;
-// }
 
 /*
  *  remove the block from the freelist (must pass in blocks that in the freelist)
@@ -303,6 +294,7 @@ void *sf_memalign(size_t size, size_t align) {
         // sf_block *next=ptr-16;
         current=split(current, free_size-8, isLast, M);
         current=initial+free_size-16;
+        isLast=current==((void *)epilogue-(current->header&BLOCK_SIZE_MASK))?1:0;
         remove_block(current);
         sf_free(initial);
     }
