@@ -130,8 +130,12 @@ sf_block *split(sf_block *current, size_t size, int isLast, int alignment){
  */
 void coalesce(sf_block *current, sf_block *next, int isLast){
     int prev_allocated=current->header&PREV_BLOCK_ALLOCATED;
+    sf_block *middle=(void *)current+(current->header&BLOCK_SIZE_MASK);
     current->header=((void *)next-(void *)current+(next->header&BLOCK_SIZE_MASK))|prev_allocated;
     remove_block(current);
+    if(middle!=next){
+        remove_block(middle);
+    }
     remove_block(next);
     // sf_block *after=(void *)current+(current->header&BLOCK_SIZE_MASK);
     // after->prev_footer=current->header;

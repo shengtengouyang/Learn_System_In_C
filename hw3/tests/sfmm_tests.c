@@ -202,6 +202,44 @@ Test(sf_memsuite_student, realloc_smaller_block_free_block, .init = sf_mem_init,
 
 //############################################
 //STUDENT UNIT TESTS SHOULD BE WRITTEN BELOW
+Test(sf_memsuite_student, malloc_freed_block, .init=sf_mem_init, .fini=sf_mem_fini){
+	sf_errno = 0;
+	void *x=sf_malloc(100);
+	void *y=sf_malloc(100);
+	cr_assert_not_null(x, "x is NULL");
+	cr_assert_not_null(y, "y is NULL");
+	sf_free(x);
+	assert_free_block_count(0, 2);
+	assert_free_list_size(1, 1);
+	assert_free_list_size(9,1);
+	void *z=sf_malloc(100);
+	cr_assert_not_null(z, "z is NULL");
+	assert_free_block_count(0, 1);
+	assert_free_list_size(1, 0);
+	assert_free_list_size(9,1);
+	cr_assert(sf_errno == 0, "sf_errno is not 0!");
+}
+
+Test(sf_memsuite_student, free_coalesce_wild, .init = sf_mem_init, .fini = sf_mem_fini) {
+	sf_errno=0;
+    void *x=sf_malloc(200);
+    void *y=sf_malloc(50);
+    void *z=sf_malloc(500);
+    sf_free(x);
+    sf_free(z);
+    assert_free_block_count(0, 2);
+    assert_free_list_size(3, 1);
+    assert_free_list_size(9, 1);
+    sf_show_free_lists();
+    sf_free(y);
+    sf_show_free_lists();
+    assert_free_block_count(0, 1);
+    assert_free_list_size(9, 1);
+    assert_free_list_size(3, 0);
+    assert_free_block_count(3968, 1);
+    cr_assert(sf_errno == 0, "sf_errno is not 0!");
+}
+
 //DO NOT DELETE THESE COMMENTS
 //############################################
 
