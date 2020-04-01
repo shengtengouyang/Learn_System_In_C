@@ -213,6 +213,7 @@ void *sf_malloc(size_t size) {
                 if(isLast){
                     void *grow=sf_mem_grow();
                     if(!grow){
+                        sf_errno=ENOMEM;
                         return NULL;
                     }
                     // sf_block *newWild=grow-16;
@@ -231,6 +232,7 @@ void *sf_malloc(size_t size) {
 
 void sf_free(void *pp) {
     if(!checkValid(pp)){
+        sf_errno=EINVAL;
         abort();
     }
     pp=pp-16;
@@ -255,7 +257,8 @@ void sf_free(void *pp) {
 
 void *sf_realloc(void *pp, size_t rsize) {
     if(!checkValid(pp)){
-        abort();
+        sf_errno=EINVAL;
+        return NULL;
     }
     if(rsize==0){
         sf_free(pp);
@@ -266,6 +269,7 @@ void *sf_realloc(void *pp, size_t rsize) {
     if(required_size>(ptr->header&BLOCK_SIZE_MASK)){
         void *larger=sf_malloc(rsize);
         if(larger==0){
+            sf_errno=ENOMEM;
             return NULL;
         }
         memcpy(larger, pp, (ptr->header&BLOCK_SIZE_MASK)-8);
@@ -283,14 +287,21 @@ void *sf_realloc(void *pp, size_t rsize) {
 }
 
 void *sf_memalign(size_t size, size_t align) {
-    if(align<M || align%2!=0){
+    if(align&(M-1)){
         sf_errno=EINVAL;
+        return NULL;
+    }
+    if(size==0){
         return NULL;
     }
     size_t attempt=size+align+M;
     void * initial =sf_malloc(attempt);
+    if(initial==0){
+        sf_errno=ENOMEM;
+        return NULL;
+    }
     sf_block *current=initial-16;
-    int check=(uintptr_t)initial%align==0?1:0;
+    int check=(uintptr_t)initial&(align-1)?0:1;
     int isLast=current==((void *)epilogue-(current->header&BLOCK_SIZE_MASK))?1:0;
     if(!check){
         size_t free_size=((uintptr_t)initial/align+1)*align-(uintptr_t)initial;
@@ -302,7 +313,7 @@ void *sf_memalign(size_t size, size_t align) {
         remove_block(current);
         sf_free(initial);
     }
-    current=split(current, size, isLast, align);
+    current=split(current, size, isLast, M);
     // if(!(current->header&THIS_BLOCK_ALLOCATED)){
     //     current=remove_block(current);
     // }
@@ -316,7 +327,7 @@ int checkValid(void *ptr){
     if(!ptr){
         return 0;
     }
-    if((uintptr_t)ptr%M!=0){
+    if((uintptr_t)ptr&(M-1)){
         return 0;
     }
     ptr=ptr-16;

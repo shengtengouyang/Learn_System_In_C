@@ -230,9 +230,7 @@ Test(sf_memsuite_student, free_coalesce_wild, .init = sf_mem_init, .fini = sf_me
     assert_free_block_count(0, 2);
     assert_free_list_size(3, 1);
     assert_free_list_size(9, 1);
-    sf_show_free_lists();
     sf_free(y);
-    sf_show_free_lists();
     assert_free_block_count(0, 1);
     assert_free_list_size(9, 1);
     assert_free_list_size(3, 0);
@@ -240,6 +238,58 @@ Test(sf_memsuite_student, free_coalesce_wild, .init = sf_mem_init, .fini = sf_me
     cr_assert(sf_errno == 0, "sf_errno is not 0!");
 }
 
+Test(sf_memsuite_student, realloc_memalign_check_valid, .init = sf_mem_init, .fini = sf_mem_fini) {
+    sf_errno=0;
+    void *x=sf_malloc(200);
+    sf_free(x);
+    sf_realloc(x, 56);
+    cr_assert(sf_errno==EINVAL, "valid pointer for not allocated address");
+    sf_errno=0;
+    x=sf_malloc(100);
+    sf_realloc(x-16, 25);
+    cr_assert(sf_errno==EINVAL, "valid pointer for not aligned address");
+    sf_errno=0;
+    sf_realloc(0, 25);
+    cr_assert(sf_errno==EINVAL, "valid pointer for null address");
+    sf_errno=0;
+    sf_memalign(56, 96);
+    cr_assert(sf_errno==EINVAL, "valid alignment");
+}
+
+Test(sf_memsuite_student, memalign_check_align, .init = sf_mem_init, .fini = sf_mem_fini) {
+    sf_errno=0;
+    sf_malloc(56);
+    void *x=sf_malloc(300);
+    sf_malloc(100);
+    sf_free(x);
+    void *y=sf_memalign(100, 128);
+    cr_assert_eq((uintptr_t)y&127, 0);
+    sf_free(y);
+    assert_free_block_count(320, 1);
+    assert_free_list_size(9, 1);
+    cr_assert(sf_errno==0, "sf_errno is not 0");
+}
+
+Test(sf_memsuite_student, memalign_check_split, .init = sf_mem_init, .fini = sf_mem_fini) {
+    sf_errno=0;
+    sf_malloc(56);
+    void *x=sf_malloc(500);
+    sf_malloc(100);
+    int notAligned =(uintptr_t)x&255;
+    sf_free(x);
+    void *y=sf_memalign(100, 256);
+    if(!notAligned){
+        assert_free_block_count(0, 2);
+    }
+    else{
+        assert_free_block_count(0, 3);
+    }
+    sf_free(y);
+    assert_free_block_count(0, 2);
+    assert_free_block_count(512, 1);
+    assert_free_list_size(9, 1);
+    cr_assert(sf_errno==0, "sf_errno is not 0");
+}
 //DO NOT DELETE THESE COMMENTS
 //############################################
 
