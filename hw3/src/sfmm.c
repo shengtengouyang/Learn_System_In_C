@@ -99,7 +99,7 @@ sf_block *split(sf_block *current, size_t size, int isLast, int alignment){
     // sf_block *after;
     if(required_size<=current_size-M){
         remain=(void *)current+required_size;
-        remain->header=(current_size-required_size)|PREV_BLOCK_ALLOCATED;
+        remain->header=(current_size-required_size)|PREV_BLOCK_ALLOCATED|THIS_BLOCK_ALLOCATED;
         current->header-=remain->header&BLOCK_SIZE_MASK;
         // if(!allocated){
         //     remain->prev_footer=0;
@@ -287,7 +287,7 @@ void *sf_realloc(void *pp, size_t rsize) {
 }
 
 void *sf_memalign(size_t size, size_t align) {
-    if(align&(M-1)){
+    if(align<64||align&(align-1)){
         sf_errno=EINVAL;
         return NULL;
     }
