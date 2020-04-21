@@ -37,8 +37,12 @@ int worker(void) {
             out->size=sizeof(struct result);
             out->id=problems->id;
             out->failed=1;
+            write(1, out, out->size);
+            free(out);
         }
-        write(1, out, out->size);
+        else{
+            write(1, out, out->size);
+        }
         free(problems);
         raise(SIGSTOP);
     }
