@@ -22,9 +22,17 @@ int worker(void) {
     debug("Start");
     signal(SIGHUP, sighup_handler);
     signal(SIGTERM, sigterm_handler);
-    raise(SIGSTOP);
     debug("continue");
+    sigset_t mask, prev;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGHUP);
+    sigprocmask(SIG_BLOCK, &mask, &prev);
     while(1){
+        debug("child about to stop");
+        raise(SIGSTOP);
+        debug("child after stop");
+        canceledp=0;
+        sigprocmask(SIG_SETMASK, &prev, NULL);
         struct problem * problems=malloc(sizeof(struct problem));
         ssize_t header=read(0, problems, sizeof(struct problem));
         size_t datasize=problems->size-sizeof(struct problem);
@@ -32,6 +40,7 @@ int worker(void) {
         ssize_t data=read(0, (void *)problems+sizeof(struct problem), datasize);
         debug("read data: header: %ld, data: %ld", header, data);
         struct result * out=solvers[problems->type].solve(problems, &canceledp);
+        sigprocmask(SIG_BLOCK, &mask, &prev);
         if(!out){
             out=malloc(sizeof(struct result));
             out->size=sizeof(struct result);
@@ -41,10 +50,10 @@ int worker(void) {
             free(out);
         }
         else{
+            debug("write result to master");
             write(1, out, out->size);
         }
         free(problems);
-        raise(SIGSTOP);
     }
     // TO BE IMPLEMENTED
     return EXIT_FAILURE;
