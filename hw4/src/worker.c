@@ -34,7 +34,9 @@ int worker(void) {
         canceledp=0;
         sigprocmask(SIG_SETMASK, &prev, NULL);
         struct problem * problems=malloc(sizeof(struct problem));
+        debug("prepare to read problems");
         ssize_t header=read(0, problems, sizeof(struct problem));
+        debug("success read problems");
         size_t datasize=problems->size-sizeof(struct problem);
         problems=realloc(problems, problems->size);
         ssize_t data=read(0, (void *)problems+sizeof(struct problem), datasize);
