@@ -4,6 +4,7 @@
 #include "polya.h"
 #include <unistd.h>
 #include <sys/wait.h>
+#define INIT 0
 #define START 1
 #define IDLE 2
 #define CONTINUED 3
@@ -18,7 +19,8 @@
  */
 static volatile sig_atomic_t states[MAX_WORKERS];
 static volatile pid_t pids[MAX_WORKERS];
-static volatile int worker_number;
+static volatile sig_atomic_t worker_alive;
+static volatile sig_atomic_t idle;
 int findIndex(pid_t pid){
     for(int i=0; i<MAX_WORKERS; i++){
         if(pids[i]==pid){
@@ -32,39 +34,82 @@ void sigchld_handler(int sig){
     int status;
     pid_t current;
     int index;
-    while(worker_number>0&&(current=waitpid(-1, &status, WNOHANG)!=0)){
-        debug("start reaping exit child");
+    while(worker_alive>0&&(current=waitpid(-1, &status, WNOHANG|WUNTRACED|WCONTINUED))>0){
         index=findIndex(current);
-        if(WIFEXITED(status)){
+        int oldstate=states[index];
+        if(index==-1){
+            return;
+        }
+        else if(WIFEXITED(status)){
             states[index]=EXITED;
+            sf_change_state(current,oldstate, EXITED);
+            worker_alive--;
+        }
+        else if(WIFCONTINUED(status)||WIFSTOPPED(status)){
+            states[index]++;
+            sf_change_state(current, oldstate, states[index]);
+            debug("worker (pid: %d, state: %d) has %s ", current, oldstate, WIFSTOPPED(status)?"stopped":"continued");
         }
         else{
             states[index]=ABORTED;
+            sf_change_state(current, oldstate, states[index]);
+            worker_alive--;
         }
-        worker_number--;
     }
-    if(worker_number==0){
+    if(worker_alive==0){
+        sf_end();
         exit(EXIT_SUCCESS);
     }
-    debug("start waiting for stopped or continued signal");
-    current=waitpid(-1, &status, WUNTRACED|WCONTINUED);
-    index=findIndex(current);
-    debug("print current %d", current);
-    if(index==-1){
-        return;
-    }
-    else if(WIFCONTINUED(status)){
-        states[index]++;
-        debug("current is a continue signal");
-    }
-    else if(WIFSTOPPED(status)){
-        states[index]++;
-        debug("state %d change to %d", index, states[index]);
-        debug("current is stopped signal");
-    }
-    debug("current is %d, index is %d, state is %d", current, index, states[index]);
 }
 
+void idle_state(struct problem *problems[], int i, int workers){
+    struct problem *variant=get_problem_variant(workers, i);
+    if(variant){
+        problems[i]=variant;
+        debug("pid i is %d", pids[i]);
+        kill(pids[i],SIGCONT);
+        states[i]=CONTINUED;//change state to continue;
+        sf_change_state(pids[i], IDLE, CONTINUED);
+    }
+    else{
+        debug("terminate the child %d with pid %d", i, pids[i]);
+        kill(pids[i], SIGCONT);
+        kill(pids[i],SIGTERM);
+    }
+}
+
+void running_state(struct problem *problems[], int i, int writeside){
+    struct problem *variant=problems[i];
+    if(variant){
+        debug("write to child ---------------------------------------------------");
+        sf_send_problem(pids[i], variant);
+        write(writeside, variant, variant->size);
+    }
+}
+
+void stopped_state(struct problem *problems[], int i, int workers, int readside){
+    if(problems[i]){
+        struct result *results=malloc(sizeof(struct result));
+        read(readside, results, sizeof(struct result));
+        size_t data=results->size-sizeof(struct result);
+        results=realloc(results, results->size);
+        read(readside, (void *)results+sizeof(struct result), data);
+        sf_recv_result(pids[i], results);
+        if(!post_result(results, problems[i])){//if child have correct solution, post it and send sighup
+            for(int k=0; k<workers; k++){
+                if(problems[k]==problems[i]&&k!=i){
+                    sf_cancel(pids[k]);
+                    kill(pids[k], SIGHUP);
+                    problems[k]=NULL;
+                }
+            }
+            problems[i]=NULL;
+        }
+        free(results);
+    }
+    states[i]=IDLE;
+    sf_change_state(pids[i], STOPPED, IDLE);
+}
 
 int master(int workers) {
     sf_start();
@@ -72,7 +117,8 @@ int master(int workers) {
     int readfrommaster[workers][2];
     int writetomaster[workers][2];
     struct problem  *problems [workers];
-    worker_number=workers;
+    worker_alive=0;
+    idle=0;
     sigset_t mask, prev;
     sigemptyset(&mask);
     sigaddset(&mask, SIGCHLD);
@@ -88,60 +134,68 @@ int master(int workers) {
             execl("bin/polya_worker", "bin/polya_worker", NULL);
         }
         else{
+            debug("Start worker %d", i);
+
             states[i]=START;
+            sf_change_state(pids[i], INIT, START);
             problems[i]=NULL;
             close(readfrommaster[i][0]);
             close(writetomaster[i][1]);
+            worker_alive++;
+            debug("Workers alive %d", worker_alive);
+            debug("Started worker %d", i);
         }
     }
     while(1){
-        debug("prepare for next sigchld signal");
+        debug("Worker alive: %d", worker_alive);
         sigsuspend(&prev);
         for(int i=0; i<workers; i++){
             if(states[i]==IDLE||states[i]==STOPPED){//IDLE state or stopped state
                 if(states[i]==STOPPED){
-                    if(problems[i]){
-                        struct result *results=malloc(sizeof(struct result));
-                        read(writetomaster[i][0], results, sizeof(struct result));
-                        size_t data=results->size-sizeof(struct result);
-                        results=realloc(results, results->size);
-                        read(writetomaster[i][0], (void *)results+sizeof(struct result), data);
-                        sf_recv_result(pids[i], results);
-                        if(!post_result(results, problems[i])){//if child have correct solution, post it and send sighup
-                            for(int k=0; k<workers; k++){
-                                if(problems[k]==problems[i]&&k!=i){
-                                    sf_cancel(pids[k]);
-                                    kill(pids[k], SIGHUP);
-                                    problems[k]=NULL;
-                                }
-                            }
-                            problems[i]=NULL;
-                        }
-                        states[i]=IDLE;
-                        sf_change_state(pids[i], STOPPED, IDLE);
-                    }
+                    stopped_state(problems, i, workers, writetomaster[i][0]);
                 }
-                struct problem *variant=get_problem_variant(workers, i);
-                sf_change_state(pids[i], IDLE, CONTINUED);
-                if(variant){
-                    problems[i]=variant;
-                    sf_send_problem(pids[i], variant);
-                    debug("pid i is %d", pids[i]);
-                    kill(pids[i],SIGCONT);
-                    states[i]=CONTINUED;//change state to continue;
-                }
-                else{
-                    debug("terminate the child %d with pid %d", i, pids[i]);
-                    kill(pids[i], SIGCONT);
-                    kill(pids[i],SIGTERM);
-                }
+                idle_state(problems, i, workers);
+                    // if(problems[i]){
+                    //     struct result *results=malloc(sizeof(struct result));
+                    //     read(writetomaster[i][0], results, sizeof(struct result));
+                    //     size_t data=results->size-sizeof(struct result);
+                    //     results=realloc(results, results->size);
+                    //     read(writetomaster[i][0], (void *)results+sizeof(struct result), data);
+                    //     sf_recv_result(pids[i], results);
+                    //     if(!post_result(results, problems[i])){//if child have correct solution, post it and send sighup
+                    //         for(int k=0; k<workers; k++){
+                    //             if(problems[k]==problems[i]&&k!=i){
+                    //                 sf_cancel(pids[k]);
+                    //                 kill(pids[k], SIGHUP);
+                    //                 problems[k]=NULL;
+                    //             }
+                    //         }
+                    //         problems[i]=NULL;
+                    //     }
+                    //     states[i]=IDLE;
+                    //     sf_change_state(pids[i], STOPPED, IDLE);
+                    // }
+                // struct problem *variant=get_problem_variant(workers, i);
+                // sf_change_state(pids[i], IDLE, CONTINUED);
+                // if(variant){
+                //     problems[i]=variant;
+                //     sf_send_problem(pids[i], variant);
+                //     debug("pid i is %d", pids[i]);
+                //     kill(pids[i],SIGCONT);
+                //     states[i]=CONTINUED;//change state to continue;
+                // }
+                // else{
+                //     debug("terminate the child %d with pid %d", i, pids[i]);
+                //     kill(pids[i], SIGCONT);
+                //     kill(pids[i],SIGTERM);
+                // }
             }
             else if(states[i]==RUNING){
-                struct problem *variant=problems[i];
-                if(variant){
-                    debug("write to child ---------------------------------------------------");
-                    write(readfrommaster[i][1], variant, variant->size);
-                }
+                running_state(problems, i, readfrommaster[i][1]);
+                // struct problem *variant=problems[i];
+                // if(variant){
+                //     debug("write to child ---------------------------------------------------");
+                //     write(readfrommaster[i][1], variant, variant->size);
             }
         }
     }
