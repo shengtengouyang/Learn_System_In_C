@@ -48,12 +48,12 @@ int worker(void) {
             out->id=problems->id;
             out->failed=1;
             write(1, out, out->size);
-            free(out);
         }
         else{
             debug("write result to master");
             write(1, out, out->size);
         }
+        free(out);
         free(problems);
     }
     // TO BE IMPLEMENTED

@@ -4,14 +4,7 @@
 #include "polya.h"
 #include <unistd.h>
 #include <sys/wait.h>
-#define INIT 0
-#define START 1
-#define IDLE 2
-#define CONTINUED 3
-#define RUNING 4
-#define STOPPED 5
-#define EXITED 6
-#define ABORTED 7
+#define WORKER_INIT 0
 
 /*
  * master
@@ -41,17 +34,22 @@ void sigchld_handler(int sig){
             return;
         }
         else if(WIFEXITED(status)){
-            states[index]=EXITED;
-            sf_change_state(current,oldstate, EXITED);
+            states[index]=WORKER_EXITED;
+            sf_change_state(current,oldstate, WORKER_EXITED);
             worker_alive--;
         }
         else if(WIFCONTINUED(status)||WIFSTOPPED(status)){
-            states[index]++;
+            if(WIFCONTINUED(status)&&oldstate==WORKER_IDLE){
+                states[index]=WORKER_RUNNING;
+            }
+            else{
+                states[index]++;
+            }
             sf_change_state(current, oldstate, states[index]);
             debug("worker (pid: %d, state: %d) has %s ", current, oldstate, WIFSTOPPED(status)?"stopped":"continued");
         }
         else{
-            states[index]=ABORTED;
+            states[index]=WORKER_ABORTED;
             sf_change_state(current, oldstate, states[index]);
             worker_alive--;
         }
@@ -62,30 +60,42 @@ void sigchld_handler(int sig){
     }
 }
 
-void idle_state(struct problem *problems[], int i, int workers){
+void idle_state(struct problem *problems[], int i, int workers, int writeside){
+    debug("structuring problem for worker at index [ %d ]", i);
     struct problem *variant=get_problem_variant(workers, i);
     if(variant){
         problems[i]=variant;
+        debug("save problem %d of %d into index [%d]----------------------------------------------------", problems[i]->var, problems[i]->id, i);
         debug("pid i is %d", pids[i]);
         kill(pids[i],SIGCONT);
-        states[i]=CONTINUED;//change state to continue;
-        sf_change_state(pids[i], IDLE, CONTINUED);
-    }
-    else{
-        debug("terminate the child %d with pid %d", i, pids[i]);
-        kill(pids[i], SIGCONT);
-        kill(pids[i],SIGTERM);
-    }
-}
-
-void running_state(struct problem *problems[], int i, int writeside){
-    struct problem *variant=problems[i];
-    if(variant){
-        debug("write to child ---------------------------------------------------");
+        states[i]=WORKER_CONTINUED;//change state to continue;
+        sf_change_state(pids[i], WORKER_IDLE, WORKER_CONTINUED);
+        debug("write to child %d with problem :%d of %d---------------------------------------------------", i, problems[i]->var, problems[i]->id);
         sf_send_problem(pids[i], variant);
         write(writeside, variant, variant->size);
     }
+    else{
+        idle++;
+        if(idle==workers){
+            for(int i=0; i<workers; i++){
+                debug("terminate the child %d with pid %d", i, pids[i]);
+                kill(pids[i], SIGTERM);
+                kill(pids[i], SIGCONT);
+            }
+        }
+        // kill(pids[i], SIGCONT);
+        // kill(pids[i],SIGTERM);
+    }
 }
+
+// void running_state(struct problem *problems[], int i, int writeside){
+//     struct problem *variant=problems[i];
+//     if(variant){
+//         debug("write to child %d with problem :%d of %d---------------------------------------------------", i, problems[i]->var, problems[i]->id);
+//         sf_send_problem(pids[i], variant);
+//         write(writeside, variant, variant->size);
+//     }
+// }
 
 void stopped_state(struct problem *problems[], int i, int workers, int readside){
     if(problems[i]){
@@ -107,8 +117,8 @@ void stopped_state(struct problem *problems[], int i, int workers, int readside)
         }
         free(results);
     }
-    states[i]=IDLE;
-    sf_change_state(pids[i], STOPPED, IDLE);
+    states[i]=WORKER_IDLE;
+    sf_change_state(pids[i], WORKER_STOPPED, WORKER_IDLE);
 }
 
 int master(int workers) {
@@ -136,8 +146,8 @@ int master(int workers) {
         else{
             debug("Start worker %d", i);
 
-            states[i]=START;
-            sf_change_state(pids[i], INIT, START);
+            states[i]=WORKER_STARTED;
+            sf_change_state(pids[i], WORKER_INIT, WORKER_STARTED);
             problems[i]=NULL;
             close(readfrommaster[i][0]);
             close(writetomaster[i][1]);
@@ -150,11 +160,11 @@ int master(int workers) {
         debug("Worker alive: %d", worker_alive);
         sigsuspend(&prev);
         for(int i=0; i<workers; i++){
-            if(states[i]==IDLE||states[i]==STOPPED){//IDLE state or stopped state
-                if(states[i]==STOPPED){
+            if(states[i]==WORKER_IDLE||states[i]==WORKER_STOPPED){//IDLE state or stopped state
+                if(states[i]==WORKER_STOPPED){
                     stopped_state(problems, i, workers, writetomaster[i][0]);
                 }
-                idle_state(problems, i, workers);
+                idle_state(problems, i, workers, readfrommaster[i][1]);
                     // if(problems[i]){
                     //     struct result *results=malloc(sizeof(struct result));
                     //     read(writetomaster[i][0], results, sizeof(struct result));
@@ -190,13 +200,13 @@ int master(int workers) {
                 //     kill(pids[i],SIGTERM);
                 // }
             }
-            else if(states[i]==RUNING){
-                running_state(problems, i, readfrommaster[i][1]);
-                // struct problem *variant=problems[i];
-                // if(variant){
-                //     debug("write to child ---------------------------------------------------");
-                //     write(readfrommaster[i][1], variant, variant->size);
-            }
+            // else if(states[i]==WORKER_RUNNING){
+            //     running_state(problems, i, readfrommaster[i][1]);
+            //     // struct problem *variant=problems[i];
+            //     // if(variant){
+            //     //     debug("write to child ---------------------------------------------------");
+            //     //     write(readfrommaster[i][1], variant, variant->size);
+            // }
         }
     }
         // debug("find out one idle pid, check state, do corresponding work, current pid is: %d",current);
