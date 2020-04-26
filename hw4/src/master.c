@@ -38,15 +38,20 @@ void sigchld_handler(int sig){
             sf_change_state(current,oldstate, WORKER_EXITED);
             worker_alive--;
         }
-        else if(WIFCONTINUED(status)||WIFSTOPPED(status)){
-            if(WIFCONTINUED(status)&&oldstate==WORKER_IDLE){
-                states[index]=WORKER_RUNNING;
+        else if(WIFCONTINUED(status)){
+            states[index]=WORKER_RUNNING;
+            sf_change_state(current, oldstate, states[index]);
+            debug("worker (pid: %d, state: %d) has %s ", current, oldstate, "continued");
+        }
+        else if(WIFSTOPPED(status)){
+            if(states[index]==WORKER_STARTED){
+                states[index]=WORKER_IDLE;
             }
             else{
-                states[index]++;
+                states[index]=WORKER_STOPPED;
             }
             sf_change_state(current, oldstate, states[index]);
-            debug("worker (pid: %d, state: %d) has %s ", current, oldstate, WIFSTOPPED(status)?"stopped":"continued");
+            debug("worker (pid: %d, state: %d) has %s ", current, oldstate, "stopped");
         }
         else{
             states[index]=WORKER_ABORTED;
@@ -95,13 +100,15 @@ void stopped_state(struct problem *problems[], int i, int workers, int readside)
     sf_recv_result(pids[i], results);
     states[i]=WORKER_IDLE;
     sf_change_state(pids[i], WORKER_STOPPED, WORKER_IDLE);
-    if(!post_result(results, problems[i])){//if child have correct solution, post it and send sighup
+    if(problems[i]&&!post_result(results, problems[i])){//if child have correct solution, post it and send sighup
         for(int k=0; k<workers; k++){
             if(problems[k]==problems[i]&&k!=i){
                 sf_cancel(pids[k]);
                 kill(pids[k], SIGHUP);
+                problems[k]=NULL;
             }
         }
+        problems[i]=NULL;
     }
     free(results);
 }
