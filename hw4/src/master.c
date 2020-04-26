@@ -127,6 +127,7 @@ void stopped_state(struct problem *problems[], int i, int workers, int readside)
 int master(int workers) {
     sf_start();
     signal(SIGCHLD, sigchld_handler);
+    signal(SIGPIPE, SIG_IGN);
     int readfrommaster[workers][2];
     int writetomaster[workers][2];
     struct problem  *problems [workers];
