@@ -14,6 +14,7 @@ static volatile sig_atomic_t states[MAX_WORKERS];
 static volatile pid_t pids[MAX_WORKERS];
 static volatile sig_atomic_t worker_alive;
 static volatile sig_atomic_t idle;
+static volatile sig_atomic_t aborted;
 int findIndex(pid_t pid){
     for(int i=0; i<MAX_WORKERS; i++){
         if(pids[i]==pid){
@@ -39,29 +40,39 @@ void sigchld_handler(int sig){
             worker_alive--;
         }
         else if(WIFCONTINUED(status)){
-            states[index]=WORKER_RUNNING;
-            sf_change_state(current, oldstate, states[index]);
-            debug("worker (pid: %d, state: %d) has %s ", current, oldstate, "continued");
+            if(states[index]!=WORKER_ABORTED){
+                states[index]=WORKER_RUNNING;
+                sf_change_state(current, oldstate, states[index]);
+                debug("worker (pid: %d, state: %d) has %s ", current, oldstate, "continued");
+            }
         }
         else if(WIFSTOPPED(status)){
-            if(states[index]==WORKER_STARTED){
-                states[index]=WORKER_IDLE;
+            if(states[index]!=WORKER_ABORTED){
+                if(states[index]==WORKER_STARTED){
+                    states[index]=WORKER_IDLE;
+                }
+                else{
+                    states[index]=WORKER_STOPPED;
+                }
+                sf_change_state(current, oldstate, states[index]);
+                debug("worker (pid: %d, state: %d) has %s ", current, oldstate, "stopped");
             }
-            else{
-                states[index]=WORKER_STOPPED;
-            }
-            sf_change_state(current, oldstate, states[index]);
-            debug("worker (pid: %d, state: %d) has %s ", current, oldstate, "stopped");
         }
-        else{
+        else if(WIFSIGNALED(status)){
             states[index]=WORKER_ABORTED;
             sf_change_state(current, oldstate, states[index]);
             worker_alive--;
+            aborted++;
         }
     }
     if(worker_alive==0){
         sf_end();
-        exit(EXIT_SUCCESS);
+        if(aborted!=0){
+            exit(EXIT_FAILURE);
+        }
+        else{
+            exit(EXIT_SUCCESS);
+        }
     }
 }
 
@@ -121,6 +132,7 @@ int master(int workers) {
     struct problem  *problems [workers];
     worker_alive=0;
     idle=0;
+    aborted=0;
     sigset_t mask, prev;
     sigemptyset(&mask);
     sigaddset(&mask, SIGCHLD);
