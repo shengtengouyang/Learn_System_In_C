@@ -36,18 +36,18 @@ int main(int argc, char* argv[]){
     pthread_t tid;
     int cmd=0;
     if(argc==3){
-        if(*argv[1]=='-'&&*(argv[1]+1)=='p'){
+        if(*argv[1]=='-'&&*(argv[1]+1)=='p'&&*(argv[1]+2)=='\0'){
             cmd=1;
         }
     }
     if(!cmd){
         terminate(EXIT_FAILURE);
     }
-    listenfd=Open_listenfd(argv[2]);
+    Signal(SIGHUP, sighup_handler);
+    listenfd=open_listenfd(argv[2]);
     // Perform required initialization of the PBX module.
     debug("Initializing PBX...");
     pbx = pbx_init();
-    Signal(SIGHUP, sighup_handler);
     while(1){
         clientlen=sizeof(struct sockaddr_storage);
         connfdp = malloc(sizeof(int));
