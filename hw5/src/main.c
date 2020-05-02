@@ -12,9 +12,15 @@
 #include "pbx.h"
 #include "server.h"
 #include "debug.h"
+#include "csapp.h"
 
 static void terminate(int status);
+static void *thread(void *vargp);
 
+void sighup_handler(int sig){
+    debug("receive sighup signal");
+    terminate(EXIT_SUCCESS);
+}
 /*
  * "PBX" telephone exchange simulation.
  *
@@ -24,11 +30,31 @@ int main(int argc, char* argv[]){
     // Option processing should be performed here.
     // Option '-p <port>' is required in order to specify the port number
     // on which the server should listen.
-
+    int  listenfd, *connfdp;
+    socklen_t clientlen;
+    struct sockaddr_storage clientaddr;
+    pthread_t tid;
+    int cmd=0;
+    if(argc==3){
+        if(*argv[1]=='-'&&*(argv[1]+1)=='p'){
+            cmd=1;
+        }
+    }
+    if(!cmd){
+        terminate(EXIT_FAILURE);
+    }
+    listenfd=Open_listenfd(argv[2]);
     // Perform required initialization of the PBX module.
     debug("Initializing PBX...");
     pbx = pbx_init();
-
+    Signal(SIGHUP, sighup_handler);
+    while(1){
+        clientlen=sizeof(struct sockaddr_storage);
+        connfdp = malloc(sizeof(int));
+        *connfdp =Accept(listenfd,(SA *) &clientaddr, &clientlen);
+        debug("receive a new connection request with connfdp: %d", *connfdp);
+        pthread_create(&tid, NULL, thread, connfdp);
+    }
     // TODO: Set up the server socket and enter a loop to accept connections
     // on this socket.  For each connection, a thread should be started to
     // run function pbx_client_service().  In addition, you should install
@@ -39,6 +65,15 @@ int main(int argc, char* argv[]){
 	    "before the PBX server will function.\n");
 
     terminate(EXIT_FAILURE);
+}
+
+void *thread(void *vargp){
+    debug("start a thread");
+    pthread_detach(pthread_self());
+    int *connfdp=(int *)vargp;
+    pbx_client_service(connfdp); /* Service client */
+    close(*connfdp);
+    return NULL;
 }
 
 /*
