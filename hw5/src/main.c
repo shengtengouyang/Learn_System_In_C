@@ -12,7 +12,7 @@
 #include "pbx.h"
 #include "server.h"
 #include "debug.h"
-#include "csapp.c"
+#include "csapp.h"
 
 static void terminate(int status);
 static void *thread(void *vargp);
