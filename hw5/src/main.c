@@ -12,7 +12,7 @@
 #include "pbx.h"
 #include "server.h"
 #include "debug.h"
-#include "csapp.h"
+#include "csapp.c"
 
 static void terminate(int status);
 static void *thread(void *vargp);
@@ -44,7 +44,7 @@ int main(int argc, char* argv[]){
         terminate(EXIT_FAILURE);
     }
     Signal(SIGHUP, sighup_handler);
-    listenfd=open_listenfd(argv[2]);
+    listenfd=Open_listenfd(argv[2]);
     // Perform required initialization of the PBX module.
     debug("Initializing PBX...");
     pbx = pbx_init();
@@ -53,7 +53,7 @@ int main(int argc, char* argv[]){
         connfdp = malloc(sizeof(int));
         *connfdp =Accept(listenfd,(SA *) &clientaddr, &clientlen);
         debug("receive a new connection request with connfdp: %d", *connfdp);
-        pthread_create(&tid, NULL, thread, connfdp);
+        Pthread_create(&tid, NULL, thread, connfdp);
     }
     // TODO: Set up the server socket and enter a loop to accept connections
     // on this socket.  For each connection, a thread should be started to
@@ -69,10 +69,7 @@ int main(int argc, char* argv[]){
 
 void *thread(void *vargp){
     debug("start a thread");
-    pthread_detach(pthread_self());
-    int *connfdp=(int *)vargp;
-    pbx_client_service(connfdp); /* Service client */
-    close(*connfdp);
+    pbx_client_service(vargp); /* Service client */
     return NULL;
 }
 
