@@ -14,11 +14,14 @@ static char *read_message(FILE *fp);
 
 
 void *pbx_client_service(void *arg){
+    debug("thread is started");
     FILE *fp;
     int connfdp=*(int *)arg;
     free(arg);
     pthread_detach(pthread_self());
+    debug("thread is started");
     TU *client=pbx_register(pbx, connfdp);
+    debug("register in client_service");
     fp=fdopen(connfdp, "r");
     while(1){
         char * msgbuf=read_message(fp);

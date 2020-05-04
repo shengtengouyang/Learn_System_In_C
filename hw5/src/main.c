@@ -41,7 +41,7 @@ int main(int argc, char* argv[]){
         }
     }
     if(!cmd){
-        terminate(EXIT_FAILURE);
+        exit(EXIT_FAILURE);
     }
     Signal(SIGHUP, sighup_handler);
     listenfd=Open_listenfd(argv[2]);
