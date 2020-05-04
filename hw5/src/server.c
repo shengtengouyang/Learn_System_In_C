@@ -22,6 +22,10 @@ void *pbx_client_service(void *arg){
     fp=fdopen(connfdp, "r");
     while(1){
         char * msgbuf=read_message(fp);
+        if(msgbuf==NULL){
+            tu_hangup(client);
+            return 0;
+        }
         debug("received msg: %s", msgbuf);
         TU_COMMAND cmd=parse_message(msgbuf);
         int ext;
@@ -60,6 +64,9 @@ static char *read_message(FILE *fp){
             msgbuf=realloc(msgbuf, len);
         }
         *ptr=fgetc(fp);
+        if(*ptr==EOF){
+            return NULL;
+        }
         countlen++;
         if(*ptr=='\r'){
             char temp=fgetc(fp);
