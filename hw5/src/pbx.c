@@ -190,5 +190,11 @@ void write_message(int fd, TU_STATE state){
         ptr++;
     }
     write(fd, msg, len);
+    if(state==TU_ON_HOOK){
+        char num[4];
+        int len=sprintf(num, "%d", fd);
+        write(fd, " ", 1);
+        write(fd, num, len);
+    }
     write(fd, EOL, 2);
 }
