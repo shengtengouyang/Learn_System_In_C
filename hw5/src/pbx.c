@@ -17,7 +17,7 @@ struct tu{
     int fd;
 };
 
-static void write_message(int fd, TU_STATE state);
+static void write_message(TU *tu);
 
 PBX *pbx_init(){
     PBX *init = malloc(sizeof(PBX));
@@ -28,7 +28,17 @@ PBX *pbx_init(){
 }
 
 void pbx_shutdown(PBX *pbx){
-
+    for(int i=0; i<PBX_MAX_EXTENSIONS; i++){
+        TU * currentTU=pbx->extensions[i];
+        if(currentTU!=0){
+            debug("start shutting down tu: %d", currentTU->fd);
+            shutdown(currentTU->fd, SHUT_RDWR);
+            debug("start hangup tu: %d", currentTU->fd);
+            tu_hangup(currentTU);
+            pbx_unregister(pbx, currentTU);
+            debug("start unregister tu");
+        }
+    }
 }
 
 TU *pbx_register(PBX *pbx, int fd){
@@ -41,7 +51,7 @@ TU *pbx_register(PBX *pbx, int fd){
     newtu->opponent=0;
     newtu->fd=fd;
     pbx->extensions[fd]=newtu;
-    write_message(fd, TU_ON_HOOK);
+    write_message(newtu);
     return newtu;
 }
 
@@ -81,10 +91,10 @@ int tu_pickup(TU *tu){
             break;
     }
     debug("current tu %d change state to %d", tu->fd, tu->state);
-    write_message(tu->fd, tu->state);
+    write_message(tu);
     if(other){
         debug("other tu %d change state to %d", other->fd, other->state);
-        write_message(other->fd, other->state);
+        write_message(other);
     }
     return 0;
 }
@@ -112,11 +122,14 @@ int tu_hangup(TU *tu){
         default:
             break;
     }
-    write_message(tu->fd, tu->state);
+    debug("other address before: %p", other);
+    write_message(tu);
+    debug("other address after: %p", other);
     if(other){
+        debug("opponent fd is : %d and state is %d", other->fd, other->state);
         other->opponent=0;
         tu->opponent=0;
-        write_message(other->fd, other->state);
+        write_message(other);
     }
     return 0;
 }
@@ -142,9 +155,9 @@ int tu_dial(TU *tu, int ext){
             }
         }
     }
-    write_message(tu->fd, tu->state);
+    write_message(tu);
     if(changed){
-        write_message(tu->opponent->fd, tu->opponent->state);
+        write_message(tu->opponent);
     }
     return 0;
 }
@@ -172,7 +185,7 @@ int tu_chat(TU *tu, char *msg){
             len++;
             ptr++;
         }
-        write_message(tu->fd, tu->state);
+        write_message(tu);
         write(tu->opponent->fd, "CHAT ", 5);
         write(tu->opponent->fd, msg, len);
         write(tu->opponent->fd, EOL, 2);
@@ -180,8 +193,10 @@ int tu_chat(TU *tu, char *msg){
     return 0;
 }
 
-void write_message(int fd, TU_STATE state){
-    debug("write message in state %d", state);
+void write_message(TU *tu){
+    int fd=tu->fd;
+    TU_STATE state=tu->state;
+    debug("write message in state %d to fd: %d", state, fd);
     char * msg=tu_state_names[state];
     char *ptr=msg;
     int len=1;
@@ -189,6 +204,7 @@ void write_message(int fd, TU_STATE state){
         len++;
         ptr++;
     }
+    debug("got blocked writing");
     write(fd, msg, len);
     if(state==TU_ON_HOOK){
         char num[4];
@@ -196,5 +212,12 @@ void write_message(int fd, TU_STATE state){
         write(fd, " ", 1);
         write(fd, num, len);
     }
+    else if(state==TU_CONNECTED){
+        char num[4];
+        int len=sprintf(num, "%d", tu->opponent->fd);
+        write(fd, " ", 1);
+        write(fd, num, len);
+    }
     write(fd, EOL, 2);
+    debug("ends writing");
 }

@@ -26,7 +26,7 @@ void *pbx_client_service(void *arg){
     while(1){
         char * msgbuf=read_message(fp);
         if(msgbuf==NULL){
-            tu_hangup(client);
+            debug("reading interrupted, ----------------------terminating");
             return 0;
         }
         debug("received msg: %s", msgbuf);
@@ -59,8 +59,7 @@ static char *read_message(FILE *fp){
     while(1){
         if(countlen==len-1){
             if(len+1==0){
-                *ptr=fgetc(fp);
-                *(ptr+1)='\0';
+                *ptr='\0';
                 break;
             }
             len=2*len;

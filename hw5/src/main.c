@@ -44,6 +44,7 @@ int main(int argc, char* argv[]){
         exit(EXIT_FAILURE);
     }
     Signal(SIGHUP, sighup_handler);
+    Signal(SIGPIPE, SIG_IGN);
     listenfd=Open_listenfd(argv[2]);
     // Perform required initialization of the PBX module.
     debug("Initializing PBX...");
