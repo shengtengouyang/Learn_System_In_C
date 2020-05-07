@@ -15,6 +15,7 @@ struct tu{
     TU_STATE state;
     TU *opponent;
     int fd;
+    FILE *file;
 };
 
 static void write_message(TU *tu);
@@ -50,6 +51,7 @@ TU *pbx_register(PBX *pbx, int fd){
     newtu->state=TU_ON_HOOK;
     newtu->opponent=0;
     newtu->fd=fd;
+    newtu->file=fdopen(fd, "w");
     pbx->extensions[fd]=newtu;
     write_message(newtu);
     return newtu;
@@ -58,6 +60,7 @@ TU *pbx_register(PBX *pbx, int fd){
 
 int pbx_unregister(PBX *pbx, TU *tu){
     int fd=tu->fd;
+    fclose(tu->file);
     free(tu);
     if(fd<4||fd>PBX_MAX_EXTENSIONS){
         return -1;
@@ -179,16 +182,22 @@ int tu_chat(TU *tu, char *msg){
         return -1;
     }
     else{
-        int len=1;
-        char *ptr=msg;
-        while(*ptr!='\0'){
-            len++;
-            ptr++;
-        }
+        // int len=1;
+        // char *ptr=msg;
+        // while(*ptr!='\0'){
+        //     len++;
+        //     ptr++;
+        // }
         write_message(tu);
-        write(tu->opponent->fd, "CHAT ", 5);
-        write(tu->opponent->fd, msg, len);
-        write(tu->opponent->fd, EOL, 2);
+        FILE *file=tu->opponent->file;
+        fputs("CHAT ",file);
+        fputs(msg,file);
+        fputs(EOL,file);
+        fflush(file);
+        // fclose(file);
+        // write(tu->opponent->fd, "CHAT ", 5);
+        // write(tu->opponent->fd, msg, len);
+        // write(tu->opponent->fd, EOL, 2);
     }
     return 0;
 }
@@ -198,26 +207,37 @@ void write_message(TU *tu){
     TU_STATE state=tu->state;
     debug("write message in state %d to fd: %d", state, fd);
     char * msg=tu_state_names[state];
-    char *ptr=msg;
-    int len=1;
-    while(*ptr!='\0'){
-        len++;
-        ptr++;
-    }
+    FILE *file=tu->file;
+    fputs(msg, file);
+    // char *ptr=msg;
+    // int len=1;
+    // while(*ptr!='\0'){
+    //     len++;
+    //     ptr++;
+    // }
     debug("got blocked writing");
-    write(fd, msg, len);
+    // write(fd, msg, len);
     if(state==TU_ON_HOOK){
         char num[4];
-        int len=sprintf(num, "%d", fd);
-        write(fd, " ", 1);
-        write(fd, num, len);
+        sprintf(num, "%d", fd);
+        fputs(" ", file);
+        fputs(num, file);
+        // write(fd, " ", 1);
+        // write(fd, num, len);
     }
     else if(state==TU_CONNECTED){
         char num[4];
-        int len=sprintf(num, "%d", tu->opponent->fd);
-        write(fd, " ", 1);
-        write(fd, num, len);
+        sprintf(num, "%d", tu->opponent->fd);
+        fputs(" ", file);
+        fputs(num, file);
+        // char num[4];
+        // int len=sprintf(num, "%d", tu->opponent->fd);
+        // write(fd, " ", 1);
+        // write(fd, num, len);
     }
-    write(fd, EOL, 2);
+    fputs(EOL, file);
+    fflush(file);
+    // fclose(file);
+    // write(fd, EOL, 2);
     debug("ends writing");
 }

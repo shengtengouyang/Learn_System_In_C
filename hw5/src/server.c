@@ -24,6 +24,7 @@ void *pbx_client_service(void *arg){
     debug("register in client_service");
     fp=fdopen(connfdp, "r");
     while(1){
+        debug("file opened for reading %p", fp);
         char * msgbuf=read_message(fp);
         if(msgbuf==NULL){
             debug("reading interrupted, ----------------------terminating");
