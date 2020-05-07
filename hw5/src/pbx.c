@@ -4,8 +4,10 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <semaphore.h>
 #include "debug.h"
 #include "pbx.h"
+#include "csapp.h"
 
 struct pbx{
     TU *extensions[PBX_MAX_EXTENSIONS];
@@ -16,6 +18,7 @@ struct tu{
     TU *opponent;
     int fd;
     FILE *file;
+    sem_t mutex;
 };
 
 static void write_message(TU *tu);
@@ -34,6 +37,7 @@ void pbx_shutdown(PBX *pbx){
         if(currentTU!=0){
             debug("start shutting down tu: %d", currentTU->fd);
             shutdown(currentTU->fd, SHUT_RDWR);
+            debug("start hangup tu: %d", currentTU->fd);
         }
     }
 }
@@ -47,6 +51,7 @@ TU *pbx_register(PBX *pbx, int fd){
     newtu->state=TU_ON_HOOK;
     newtu->opponent=0;
     newtu->fd=fd;
+    sem_init(&(newtu->mutex), 0, 1);
     newtu->file=fdopen(fd, "w");
     pbx->extensions[fd]=newtu;
     write_message(newtu);
@@ -84,7 +89,7 @@ int tu_pickup(TU *tu){
         case TU_ON_HOOK: tu->state=TU_DIAL_TONE; break;
         case TU_RINGING:
             tu->state=TU_CONNECTED;
-            tu->opponent->state=TU_CONNECTED;
+            other->state=TU_CONNECTED;
             break;
         default:
             break;
@@ -140,17 +145,16 @@ int tu_dial(TU *tu, int ext){
     }
     else{
         if(tu->state==TU_DIAL_TONE){
-            tu->opponent=pbx->extensions[ext];
-            tu->opponent->opponent=tu;
-            if(tu->opponent->state==TU_ON_HOOK){
+            TU *other=pbx->extensions[ext];
+            if(other->state==TU_ON_HOOK){
                 tu->state=TU_RING_BACK;
-                tu->opponent->state=TU_RINGING;
+                tu->opponent=other;
+                other->state=TU_RINGING;
+                other->opponent=tu;
                 changed=1;
             }
             else{
                 tu->state=TU_BUSY_SIGNAL;
-                tu->opponent->opponent=0;
-                tu->opponent=0;
             }
         }
     }
@@ -161,19 +165,8 @@ int tu_dial(TU *tu, int ext){
     return 0;
 }
 
-/*
- * "Chat" over a connection.
- *
- * If the state of the TU is not TU_CONNECTED, then nothing is sent and -1 is returned.
- * Otherwise, the specified message is sent via the network connection to the peer TU.
- * In all cases, the states of the TUs are left unchanged.
- *
- * @param tu  The tu sending the chat.
- * @param msg  The message to be sent.
- * @return 0  If the chat was successfully sent, -1 if there is no call in progress
- * or some other error occurs.
- */
 int tu_chat(TU *tu, char *msg){
+    write_message(tu);
     if(tu->state!=TU_CONNECTED){
         return -1;
     }
@@ -184,7 +177,6 @@ int tu_chat(TU *tu, char *msg){
         //     len++;
         //     ptr++;
         // }
-        write_message(tu);
         FILE *file=tu->opponent->file;
         fputs("CHAT ",file);
         fputs(msg,file);
@@ -211,7 +203,8 @@ void write_message(TU *tu){
     //     len++;
     //     ptr++;
     // }
-    debug("got blocked writing");
+    debug("write down message: %s",msg);
+    // debug("got blocked writing");
     // write(fd, msg, len);
     if(state==TU_ON_HOOK){
         char num[4];
