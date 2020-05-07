@@ -34,10 +34,6 @@ void pbx_shutdown(PBX *pbx){
         if(currentTU!=0){
             debug("start shutting down tu: %d", currentTU->fd);
             shutdown(currentTU->fd, SHUT_RDWR);
-            debug("start hangup tu: %d", currentTU->fd);
-            tu_hangup(currentTU);
-            pbx_unregister(pbx, currentTU);
-            debug("start unregister tu");
         }
     }
 }

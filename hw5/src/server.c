@@ -27,6 +27,10 @@ void *pbx_client_service(void *arg){
         debug("file opened for reading %p", fp);
         char * msgbuf=read_message(fp);
         if(msgbuf==NULL){
+            debug("start hangup tu: %d", connfdp);
+            tu_hangup(client);
+            debug("start unregister tu");
+            pbx_unregister(pbx, client);
             debug("reading interrupted, ----------------------terminating");
             return 0;
         }
