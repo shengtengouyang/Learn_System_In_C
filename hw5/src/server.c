@@ -71,6 +71,7 @@ static char *read_message(FILE *fp){
         }
         *ptr=fgetc(fp);
         if(*ptr==EOF){
+            debug("detected EOF");
             return NULL;
         }
         countlen++;
