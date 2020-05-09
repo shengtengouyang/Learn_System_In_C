@@ -41,6 +41,7 @@ int main(int argc, char* argv[]){
         }
     }
     if(!cmd){
+        debug("wrong command");
         exit(EXIT_FAILURE);
     }
     Signal(SIGHUP, sighup_handler);

@@ -36,21 +36,24 @@ void *pbx_client_service(void *arg){
         debug("received msg: %s", msgbuf);
         TU_COMMAND cmd=parse_message(msgbuf);
         int ext;
+        char *msgptr=msgbuf;
         switch(cmd){
             case TU_PICKUP_CMD:tu_pickup(client); break;
             case TU_HANGUP_CMD:tu_hangup(client); break;
             case TU_DIAL_CMD:
-                ext=atoi(msgbuf+5);
+                ext=atoi(msgptr+5);
                 tu_dial(client,ext);
                 break;
             case TU_CHAT_CMD:
-                msgbuf+=4;
-                while(isspace(*msgbuf)){
-                    msgbuf++;
+                msgptr+=4;
+                while(isspace(*msgptr)){
+                    msgptr++;
                 }
-                tu_chat(client, msgbuf);
+                tu_chat(client, msgptr);
                 break;
         }
+        debug("free msg for %p", msgbuf);
+        free(msgbuf);
     }
     return 0;
 }
@@ -71,6 +74,7 @@ static char *read_message(FILE *fp){
         }
         *ptr=fgetc(fp);
         if(*ptr==EOF){
+            free(msgbuf);
             debug("detected EOF");
             return NULL;
         }

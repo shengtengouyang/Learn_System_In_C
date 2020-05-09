@@ -10,8 +10,9 @@
 #include "csapp.h"
 
 struct pbx{
-    TU *extensions[PBX_MAX_EXTENSIONS];
+    TU *extensions[PBX_MAX_EXTENSIONS+4];
     sem_t mutex;
+    sem_t swap;
 };
 
 struct tu{
@@ -26,16 +27,17 @@ static void write_message(TU *tu);
 static void reorder_mutex(TU *tu, TU *other);
 PBX *pbx_init(){
     PBX *init = malloc(sizeof(PBX));
-    for(int i=0; i<PBX_MAX_EXTENSIONS; i++){
+    for(int i=0; i<PBX_MAX_EXTENSIONS+4; i++){
         init->extensions[i]=0;
     }
     sem_init(&init->mutex, 0, 1);
+    sem_init(&init->swap, 0, 1);
     return init;
 }
 
 void pbx_shutdown(PBX *pbx){
     P(&pbx->mutex);
-    for(int i=0; i<PBX_MAX_EXTENSIONS; i++){
+    for(int i=0; i<PBX_MAX_EXTENSIONS+4; i++){
         TU * currentTU=pbx->extensions[i];
         if(currentTU!=0){
             debug("start shutting down tu: %d", currentTU->fd);
@@ -49,7 +51,7 @@ void pbx_shutdown(PBX *pbx){
 TU *pbx_register(PBX *pbx, int fd){
     P(&pbx->mutex);
     debug("entering pbx_register with fd %d", fd);
-    if(fd>PBX_MAX_EXTENSIONS){
+    if(fd>PBX_MAX_EXTENSIONS+4||pbx->extensions[fd]!=NULL||fd<4){
         V(&pbx->mutex);
         return NULL;
     }
@@ -71,12 +73,12 @@ TU *pbx_register(PBX *pbx, int fd){
 int pbx_unregister(PBX *pbx, TU *tu){
     P(&pbx->mutex);
     int fd=tu->fd;
-    fclose(tu->file);
-    free(tu);
-    if(fd<4||fd>PBX_MAX_EXTENSIONS){
+    if(fd<4||fd>PBX_MAX_EXTENSIONS+4||pbx->extensions[fd]!=tu){
         V(&pbx->mutex);
         return -1;
     }
+    fclose(tu->file);
+    free(tu);
     pbx->extensions[fd]=0;
     V(&pbx->mutex);
     return 0;
@@ -84,7 +86,7 @@ int pbx_unregister(PBX *pbx, TU *tu){
 
 int tu_fileno(TU *tu){
     int fd=tu->fd;
-    if(fd<4||fd>PBX_MAX_EXTENSIONS){
+    if(fd<4||fd>PBX_MAX_EXTENSIONS+4||pbx->extensions[fd]!=tu){
         return -1;
     }
     return fd;
@@ -95,12 +97,13 @@ int tu_extension(TU *tu){
 }
 
 int tu_pickup(TU *tu){
+    P(&pbx->swap);
     P(&tu->mutex);
     debug("startpickup %p with state %d and opponent %p ", tu, tu->state, tu->opponent);
     TU *other=tu->opponent;
     int changed=0;
     switch(tu->state){
-        case TU_ON_HOOK: tu->state=TU_DIAL_TONE; break;
+        case TU_ON_HOOK: V(&pbx->swap);tu->state=TU_DIAL_TONE; break;
         case TU_RINGING:
             reorder_mutex(tu, other);
             changed=1;
@@ -108,6 +111,7 @@ int tu_pickup(TU *tu){
             other->state=TU_CONNECTED;
             break;
         default:
+            V(&pbx->swap);
             break;
     }
     debug("current tu %d change state to %d", tu->fd, tu->state);
@@ -123,6 +127,7 @@ int tu_pickup(TU *tu){
 
 int tu_hangup(TU *tu){
     debug("start executing hangup ");
+    P(&pbx->swap);
     P(&tu->mutex);
     debug("real start executing hangup ");
     TU *other=tu->opponent;
@@ -164,6 +169,7 @@ int tu_hangup(TU *tu){
 
 int tu_dial(TU *tu, int ext){
     P(&pbx->mutex);
+    P(&pbx->swap);
     P(&tu->mutex);
     int changed=0;
     if(tu->state==TU_DIAL_TONE){
@@ -187,21 +193,26 @@ int tu_dial(TU *tu, int ext){
             tu->state=TU_BUSY_SIGNAL;
         }
     }
+    else{
+        V(&pbx->swap);
+    }
     write_message(tu);
-    V(&tu->mutex);
     if(changed){
         write_message(tu->opponent);
         V(&tu->opponent->mutex);
     }
+    V(&tu->mutex);
     V(&pbx->mutex);
     return 0;
 }
 
 int tu_chat(TU *tu, char *msg){
+    P(&pbx->swap);
     P(&tu->mutex);
     write_message(tu);
     if(tu->state!=TU_CONNECTED){
         V(&tu->mutex);
+        V(&pbx->swap);
         return -1;
     }
     else{
@@ -243,21 +254,14 @@ void write_message(TU *tu){
     debug("write down message: %s",msg);
     // debug("got blocked writing");
     // write(fd, msg, len);
-    if(state==TU_ON_HOOK){
+    if(state==TU_ON_HOOK||state==TU_CONNECTED){
+        if(state==TU_CONNECTED){
+            fd=tu->opponent->fd;
+        }
         char num[4];
         sprintf(num, "%d", fd);
         fputs(" ", file);
         fputs(num, file);
-        // write(fd, " ", 1);
-        // write(fd, num, len);
-    }
-    else if(state==TU_CONNECTED){
-        char num[4];
-        sprintf(num, "%d", tu->opponent->fd);
-        fputs(" ", file);
-        fputs(num, file);
-        // char num[4];
-        // int len=sprintf(num, "%d", tu->opponent->fd);
         // write(fd, " ", 1);
         // write(fd, num, len);
     }
@@ -267,9 +271,12 @@ void write_message(TU *tu){
     // write(fd, EOL, 2);
     debug("ends writing");
 }
-
+//caller of reorder ( P(&tu->mutex);)
+//if A: A>B,   P(A), x P(B)
+//if  B:        P(B), x P(A), B<A, reorder, V(B),    P(A), P(B)
 void reorder_mutex(TU *tu, TU *other){
     if(tu==other||other==0){
+        V(&pbx->swap);
         return;
     }
     if(&tu->mutex>&other->mutex){
@@ -277,7 +284,10 @@ void reorder_mutex(TU *tu, TU *other){
     }
     else{
         V(&tu->mutex);
+        //if other finished, may affter self tu, then other is no longer other,
+        //if other hasn't finished or hasen't changed anything for self state, other is still other, then go ahead lock
         P(&other->mutex);
         P(&tu->mutex);
     }
+    V(&pbx->swap);
 }
