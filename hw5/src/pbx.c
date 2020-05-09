@@ -23,7 +23,7 @@ struct tu{
     sem_t mutex;
 };
 
-static void write_message(TU *tu);
+static int write_message(TU *tu);
 static void reorder_mutex(TU *tu, TU *other);
 PBX *pbx_init(){
     PBX *init = malloc(sizeof(PBX));
@@ -99,6 +99,7 @@ int tu_extension(TU *tu){
 int tu_pickup(TU *tu){
     P(&pbx->swap);
     P(&tu->mutex);
+    int error=0;
     debug("startpickup %p with state %d and opponent %p ", tu, tu->state, tu->opponent);
     TU *other=tu->opponent;
     int changed=0;
@@ -115,13 +116,16 @@ int tu_pickup(TU *tu){
             break;
     }
     debug("current tu %d change state to %d", tu->fd, tu->state);
-    write_message(tu);
+    error+=write_message(tu);
     if(changed){
         debug("other tu %d change state to %d", other->fd, other->state);
-        write_message(other);
+        error+=write_message(other);
         V(&other->mutex);
     }
     V(&tu->mutex);
+    if(error){
+        return -1;
+    }
     return 0;
 }
 
@@ -129,6 +133,7 @@ int tu_hangup(TU *tu){
     debug("start executing hangup ");
     P(&pbx->swap);
     P(&tu->mutex);
+    int error=0;
     debug("real start executing hangup ");
     TU *other=tu->opponent;
     reorder_mutex(tu, other);
@@ -154,16 +159,19 @@ int tu_hangup(TU *tu){
             break;
     }
     debug("other address before: %p", other);
-    write_message(tu);
+    error+=write_message(tu);
     debug("other address after: %p", other);
     if(other){
         debug("opponent fd is : %d and state is %d", other->fd, other->state);
         other->opponent=0;
         tu->opponent=0;
-        write_message(other);
+        error+=write_message(other);
         V(&other->mutex);
     }
     V(&tu->mutex);
+    if(error){
+        return -1;
+    }
     return 0;
 }
 
@@ -171,6 +179,7 @@ int tu_dial(TU *tu, int ext){
     P(&pbx->mutex);
     P(&pbx->swap);
     P(&tu->mutex);
+    int error=0;
     int changed=0;
     if(tu->state==TU_DIAL_TONE){
         TU *other=pbx->extensions[ext];
@@ -196,20 +205,24 @@ int tu_dial(TU *tu, int ext){
     else{
         V(&pbx->swap);
     }
-    write_message(tu);
+    error+=write_message(tu);
     if(changed){
-        write_message(tu->opponent);
+        error+=write_message(tu->opponent);
         V(&tu->opponent->mutex);
     }
     V(&tu->mutex);
     V(&pbx->mutex);
+    if(error){
+        return -1;
+    }
     return 0;
 }
 
 int tu_chat(TU *tu, char *msg){
     P(&pbx->swap);
     P(&tu->mutex);
-    write_message(tu);
+    int error=0;
+    error+=write_message(tu);
     if(tu->state!=TU_CONNECTED){
         V(&tu->mutex);
         V(&pbx->swap);
@@ -224,10 +237,12 @@ int tu_chat(TU *tu, char *msg){
         //     ptr++;
         // }
         FILE *file=tu->opponent->file;
-        fputs("CHAT ",file);
-        fputs(msg,file);
-        fputs(EOL,file);
-        fflush(file);
+        if(fputs("CHAT ",file)<0||fputs(msg,file)<0||fputs(EOL,file)<0){
+            error++;
+        }
+        if(fflush(file)<0){
+            error++;
+        }
         V(&tu->opponent->mutex);
         // fclose(file);
         // write(tu->opponent->fd, "CHAT ", 5);
@@ -235,16 +250,22 @@ int tu_chat(TU *tu, char *msg){
         // write(tu->opponent->fd, EOL, 2);
     }
     V(&tu->mutex);
+    if(error){
+        return -1;
+    }
     return 0;
 }
 
-void write_message(TU *tu){
+int write_message(TU *tu){
     int fd=tu->fd;
+    int error=0;
     TU_STATE state=tu->state;
     debug("write message in state %d to fd: %d", state, fd);
     char * msg=tu_state_names[state];
     FILE *file=tu->file;
-    fputs(msg, file);
+    if(fputs(msg, file)<0){
+        error++;
+    }
     // char *ptr=msg;
     // int len=1;
     // while(*ptr!='\0'){
@@ -259,14 +280,22 @@ void write_message(TU *tu){
             fd=tu->opponent->fd;
         }
         char num[4];
-        sprintf(num, "%d", fd);
-        fputs(" ", file);
-        fputs(num, file);
+        if(sprintf(num, "%d", fd)<0||fputs(" ", file)<0||fputs(num, file)<0){
+            error++;
+        }
         // write(fd, " ", 1);
         // write(fd, num, len);
     }
-    fputs(EOL, file);
-    fflush(file);
+    if(fputs(EOL, file)<0){
+        error++;
+    }
+    if(fflush(file)<0){
+        error++;
+    }
+    if(error){
+        return 1;
+    }
+    return 0;
     // fclose(file);
     // write(fd, EOL, 2);
     debug("ends writing");
