@@ -16,10 +16,10 @@
 
 static void terminate(int status);
 static void *thread(void *vargp);
-
+static volatile sig_atomic_t finished;
 void sighup_handler(int sig){
+    finished=1;
     debug("receive sighup signal");
-    terminate(EXIT_SUCCESS);
 }
 /*
  * "PBX" telephone exchange simulation.
@@ -31,9 +31,18 @@ int main(int argc, char* argv[]){
     // Option '-p <port>' is required in order to specify the port number
     // on which the server should listen.
     int  listenfd, *connfdp;
+    finished=0;
     socklen_t clientlen;
     struct sockaddr_storage clientaddr;
     pthread_t tid;
+    //Signal(sighup, sighuphandler), without sa_restart
+    struct sigaction action, old_action;
+    action.sa_handler = sighup_handler;
+    action.sa_flags = 0;
+    sigemptyset(&action.sa_mask); /* Block sigs of type being handled */
+    if (sigaction(SIGHUP, &action, &old_action) < 0)
+        unix_error("Signal error");
+    //
     int cmd=0;
     if(argc==3){
         if(*argv[1]=='-'&&*(argv[1]+1)=='p'&&*(argv[1]+2)=='\0'){
@@ -44,7 +53,6 @@ int main(int argc, char* argv[]){
         debug("wrong command");
         exit(EXIT_FAILURE);
     }
-    Signal(SIGHUP, sighup_handler);
     Signal(SIGPIPE, SIG_IGN);
     listenfd=Open_listenfd(argv[2]);
     // Perform required initialization of the PBX module.
@@ -53,8 +61,12 @@ int main(int argc, char* argv[]){
     while(1){
         clientlen=sizeof(struct sockaddr_storage);
         connfdp = malloc(sizeof(int));
-        *connfdp =Accept(listenfd,(SA *) &clientaddr, &clientlen);
+        *connfdp =accept(listenfd,(SA *) &clientaddr, &clientlen);
         debug("receive a new connection request with connfdp: %d", *connfdp);
+        if(finished){
+            close(listenfd);
+            terminate(EXIT_SUCCESS);
+        }
         Pthread_create(&tid, NULL, thread, connfdp);
     }
     // TODO: Set up the server socket and enter a loop to accept connections
