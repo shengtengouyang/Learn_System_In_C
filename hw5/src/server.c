@@ -21,6 +21,9 @@ void *pbx_client_service(void *arg){
     pthread_detach(pthread_self());
     debug("thread is started");
     TU *client=pbx_register(pbx, connfdp);
+    if (!client){
+        return 0;
+    }
     debug("register in client_service");
     fp=fdopen(connfdp, "r");
     while(1){
