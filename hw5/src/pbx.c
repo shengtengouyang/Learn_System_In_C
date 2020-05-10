@@ -42,10 +42,25 @@ void pbx_shutdown(PBX *pbx){
         if(currentTU!=0){
             debug("start shutting down tu: %d", currentTU->fd);
             shutdown(currentTU->fd, SHUT_RDWR);
-            debug("start hangup tu: %d", currentTU->fd);
         }
     }
     V(&pbx->mutex);
+    while(1){
+        int tus=0;
+        for(int i=0; i<PBX_MAX_EXTENSIONS+4; i++){
+            if(pbx->extensions[i]==0){
+                tus++;
+            }
+            else{
+                debug("non empty tu is %d", pbx->extensions[i]->fd);
+            }
+        }
+        debug("tu numers is %d, desired is %d",tus, PBX_MAX_EXTENSIONS+4);
+        if(tus==PBX_MAX_EXTENSIONS+4){
+            break;
+        }
+    }
+    free(pbx);
 }
 
 TU *pbx_register(PBX *pbx, int fd){
@@ -65,6 +80,7 @@ TU *pbx_register(PBX *pbx, int fd){
     pbx->extensions[fd]=newtu;
     write_message(newtu);
     V(&newtu->mutex);
+    debug("leaving pbx_register with fd %d", fd);
     V(&pbx->mutex);
     return newtu;
 }
@@ -72,14 +88,17 @@ TU *pbx_register(PBX *pbx, int fd){
 
 int pbx_unregister(PBX *pbx, TU *tu){
     P(&pbx->mutex);
+    debug("start unregister tu %d", tu->fd);
     int fd=tu->fd;
     if(fd<4||fd>PBX_MAX_EXTENSIONS+4||pbx->extensions[fd]!=tu){
+        debug("error in unregister!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
         V(&pbx->mutex);
         return -1;
     }
     fclose(tu->file);
     free(tu);
     pbx->extensions[fd]=0;
+    debug("end unregister tu %d", tu->fd);
     V(&pbx->mutex);
     return 0;
 }
@@ -122,6 +141,7 @@ int tu_pickup(TU *tu){
         error+=write_message(other);
         V(&other->mutex);
     }
+    debug("end pickup %p with state %d and opponent %p ", tu, tu->state, tu->opponent);
     V(&tu->mutex);
     if(error){
         return -1;
@@ -168,6 +188,7 @@ int tu_hangup(TU *tu){
         error+=write_message(other);
         V(&other->mutex);
     }
+    debug("end executing hangup");
     V(&tu->mutex);
     if(error){
         return -1;
@@ -179,6 +200,7 @@ int tu_dial(TU *tu, int ext){
     P(&pbx->mutex);
     P(&pbx->swap);
     P(&tu->mutex);
+    debug("start dile from %d to %d", tu->fd, ext);
     int error=0;
     int changed=0;
     if(tu->state==TU_DIAL_TONE){
@@ -210,6 +232,7 @@ int tu_dial(TU *tu, int ext){
         error+=write_message(tu->opponent);
         V(&tu->opponent->mutex);
     }
+    debug("end dialing for tu: %d", tu->fd);
     V(&tu->mutex);
     V(&pbx->mutex);
     if(error){
@@ -221,6 +244,7 @@ int tu_dial(TU *tu, int ext){
 int tu_chat(TU *tu, char *msg){
     P(&pbx->swap);
     P(&tu->mutex);
+    debug("start chatting for tu %d", tu->fd);
     int error=0;
     error+=write_message(tu);
     if(tu->state!=TU_CONNECTED){
@@ -230,12 +254,6 @@ int tu_chat(TU *tu, char *msg){
     }
     else{
         reorder_mutex(tu, tu->opponent);
-        // int len=1;
-        // char *ptr=msg;
-        // while(*ptr!='\0'){
-        //     len++;
-        //     ptr++;
-        // }
         FILE *file=tu->opponent->file;
         if(fputs("CHAT ",file)<0||fputs(msg,file)<0||fputs(EOL,file)<0){
             error++;
@@ -244,11 +262,8 @@ int tu_chat(TU *tu, char *msg){
             error++;
         }
         V(&tu->opponent->mutex);
-        // fclose(file);
-        // write(tu->opponent->fd, "CHAT ", 5);
-        // write(tu->opponent->fd, msg, len);
-        // write(tu->opponent->fd, EOL, 2);
     }
+    debug("end chatting for tu %d", tu->fd);
     V(&tu->mutex);
     if(error){
         return -1;
@@ -266,12 +281,6 @@ int write_message(TU *tu){
     if(fputs(msg, file)<0){
         error++;
     }
-    // char *ptr=msg;
-    // int len=1;
-    // while(*ptr!='\0'){
-    //     len++;
-    //     ptr++;
-    // }
     debug("write down message: %s",msg);
     // debug("got blocked writing");
     // write(fd, msg, len);
@@ -283,8 +292,6 @@ int write_message(TU *tu){
         if(sprintf(num, "%d", fd)<0||fputs(" ", file)<0||fputs(num, file)<0){
             error++;
         }
-        // write(fd, " ", 1);
-        // write(fd, num, len);
     }
     if(fputs(EOL, file)<0){
         error++;
@@ -292,13 +299,11 @@ int write_message(TU *tu){
     if(fflush(file)<0){
         error++;
     }
+    debug("ends writing");
     if(error){
         return 1;
     }
     return 0;
-    // fclose(file);
-    // write(fd, EOL, 2);
-    debug("ends writing");
 }
 //caller of reorder ( P(&tu->mutex);)
 //if A: A>B,   P(A), x P(B)

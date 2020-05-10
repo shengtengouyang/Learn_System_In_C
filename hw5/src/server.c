@@ -60,6 +60,7 @@ void *pbx_client_service(void *arg){
 }
 
 static char *read_message(FILE *fp){
+    debug("read start reading message");
     size_t len=1024;
     char * msgbuf=malloc(len);
     char *ptr=msgbuf;
@@ -88,6 +89,7 @@ static char *read_message(FILE *fp){
             }
             else if(temp==EOF){
                 free(msgbuf);
+                debug("detected EOF");
                 return NULL;
             }
             else{
