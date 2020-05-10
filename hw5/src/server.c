@@ -26,6 +26,7 @@ void *pbx_client_service(void *arg){
     while(1){
         debug("file opened for reading %p", fp);
         char * msgbuf=read_message(fp);
+        debug("msg get: %s", msgbuf);
         if(msgbuf==NULL){
             debug("start unregister tu");
             tu_hangup(client);
@@ -84,6 +85,10 @@ static char *read_message(FILE *fp){
             if(temp=='\n'){
                 *ptr='\0';
                 break;
+            }
+            else if(temp==EOF){
+                free(msgbuf);
+                return NULL;
             }
             else{
                 ptr++;
