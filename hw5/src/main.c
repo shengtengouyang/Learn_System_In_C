@@ -63,11 +63,11 @@ int main(int argc, char* argv[]){
         connfdp = malloc(sizeof(int));
         *connfdp =accept(listenfd,(SA *) &clientaddr, &clientlen);
         debug("receive a new connection request with connfdp: %d", *connfdp);
+        Pthread_create(&tid, NULL, thread, connfdp);
         if(finished){
             close(listenfd);
             terminate(EXIT_SUCCESS);
         }
-        Pthread_create(&tid, NULL, thread, connfdp);
     }
     // TODO: Set up the server socket and enter a loop to accept connections
     // on this socket.  For each connection, a thread should be started to
